@@ -71,7 +71,6 @@ typedef enum {
      EC_PAIRING). */
   OP_NAT_DIV,
   OP_NAT_MOD,
-  OP_FM_LEN, /* S3: len A r, the op count of a FreeMon trace (survey section 7) */
   OP_HASH,
   OP_EC_ADD,
   OP_EC_MUL,
@@ -96,6 +95,9 @@ typedef enum {
   OP_ZK_PROVE,   /* zkProve b: the witness word list, poll id first */
   OP_ZK_PROJECT, /* zkProject C b: the choice of a ballot */
   OP_ZK_CHECK,   /* zkCheck M C w c: the type Unit on a host pass, else neutral */
+  OP_NAT_IS_SET,  /* natIsSet: the trusted isSet Nat (S5), stuck */
+  OP_U256_IS_SET, /* u256IsSet: the trusted isSet U256 (S5), stuck */
+  OP_FLAG_IS_SET, /* flagIsSet: the trusted isSet Flag (S5), stuck */
   OP_INTERVAL, /* the sort I: never a type, only the type of an interval term */
   OP_TRANSP,   /* transp L phi a: L a line (a path value in U), phi a face */
   OP_SYSTEM,   /* a system: key0, branch0, key1, branch1, ...; each branch a PLAM */

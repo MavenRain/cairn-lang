@@ -104,7 +104,7 @@ kit-state.lang REFUSE_KIT
 kit-event.lang REFUSE_KIT
 kit-entry.lang REFUSE_KIT
 kit-env.lang REFUSE_KIT
-kit-pay.lang REFUSE_KIT
+kit-emit.lang REFUSE_KIT
 base-natdiv.lang REFUSE_KIT
 base-natmod.lang REFUSE_KIT
 base-hash.lang REFUSE_KIT

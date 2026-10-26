@@ -27,6 +27,12 @@ def isProp : (A : Type 0) -> Type 0 :=
   fun (A : Type 0) => (x : A) -> (y : A) -> Path A x y
 def isSet : (A : Type 0) -> Type 0 :=
   fun (A : Type 0) => (x : A) -> (y : A) -> isProp (Path A x y)
+-- The function set (S5, Q-S5-6 (b)): when B is a set, A -> B is a set,
+-- point by point. The carriers natIsSet, u256IsSet and flagIsSet are
+-- trusted constants (docs/VALIDATION.md).
+def isSetFun : (A : Type 0) -> (B : Type 0) -> isSet B -> isSet (A -> B) :=
+  fun (A : Type 0) (B : Type 0) (s : isSet B) (f : A -> B) (g : A -> B) (p : Path (A -> B) f g) (q : Path (A -> B) f g) =>
+    fun (i : I) => fun (j : I) => fun (a : A) => (s (f a) (g a) (fun (k : I) => (p @ k) a) (fun (k : I) => (q @ k) a) @ i) @ j
 
 -- The circle, a higher inductive family (S4a, R1 (a)). The path
 -- constructor loop goes from base to base.
@@ -127,9 +133,85 @@ def fmBind : (A : Type 0) -> (B : Type 0) -> (A -> FreeMon B) -> FreeMon A -> Fr
 def fmMap : (A : Type 0) -> (B : Type 0) -> (A -> B) -> FreeMon A -> FreeMon B :=
   fun (A : Type 0) (B : Type 0) (f : A -> B) => fmBind A B (fun (a : A) => fmEta B (f a))
 -- The trace position (S3, USER ruling Q-S3-3 (a)): a position is an op
--- count. `len A r` is a C builtin (OP_FM_LEN): the domain cannot prove the
--- Nat monoid laws that fmFold needs (S3 survey section 7).
+-- count.
 def OpPos : Type 0 := Nat
+-- The folds of a trace into a set B (S5, Q-S5-6 (b)): fmChain runs from
+-- the first op to the last, fmRun from the last op to the first. The
+-- monoid is the endomaps of B, a set by isSetFun, and its laws are refl.
+def endoThen : (B : Type 0) -> (B -> B) -> (B -> B) -> B -> B :=
+  fun (B : Type 0) (g : B -> B) (h : B -> B) (d : B) => h (g d)
+def fmChain : (A : Type 0) -> (B : Type 0) -> isSet B -> (B -> A -> B) -> B -> FreeMon A -> B :=
+  fun (A : Type 0) (B : Type 0) (s : isSet B) (step : B -> A -> B) (b0 : B) (r : FreeMon A) =>
+    fmFold A (B -> B) (isSetFun B B s) (fun (d : B) => d) (endoThen B)
+      (fun (x : B -> B) (y : B -> B) (z : B -> B) => refl)
+      (fun (x : B -> B) => refl)
+      (fun (x : B -> B) => refl)
+      (fun (a : A) (d : B) => step d a) r b0
+def fmRun : (A : Type 0) -> (B : Type 0) -> isSet B -> (A -> B -> B) -> B -> FreeMon A -> B :=
+  fun (A : Type 0) (B : Type 0) (s : isSet B) (step : A -> B -> B) (b0 : B) (r : FreeMon A) =>
+    fmFold A (B -> B) (isSetFun B B s) (fun (d : B) => d) (fun (g : B -> B) (h : B -> B) => endoThen B h g)
+      (fun (x : B -> B) (y : B -> B) (z : B -> B) => refl)
+      (fun (x : B -> B) => refl)
+      (fun (x : B -> B) => refl)
+      step r b0
+-- len A r, the op count of the trace r (S5, O16): a fold, not a C builtin.
+def len : (A : Type 0) -> FreeMon A -> Nat :=
+  fun (A : Type 0) (r : FreeMon A) => fmChain A Nat natIsSet (fun (n : Nat) (a : A) => natAdd n 1) 0 r
+-- The record (S5, Part R, Q-S5-1 .. Q-S5-5 (a)): a trace of entries, each
+-- entry a digest. A guest names Digest, never U256. snoc puts an entry at
+-- the end.
+def Digest : Type 0 := U256
+def Entry : Type 0 := Digest
+def Record : Type 0 := FreeMon Entry
+def snoc : Entry -> Record -> Record :=
+  fun (e : Entry) (r : Record) => fmMul Entry r (fmEta Entry e)
+-- The hash chain (Q-S5-3 (a), Q-S5-4 (a)): the tags are the ASCII bytes of
+-- "cairn-genesis" and "cairn-append" as a big-endian U256, as the bLSAG
+-- tag "cairn" (O5). H3 nests two hash calls. chainFrom d r runs the chain
+-- from d over the entries of r, and head r runs it from the genesis digest.
+def tagGenesis : Digest := 0x636169726e2d67656e65736973u
+def tagAppend : Digest := 0x636169726e2d617070656e64u
+def H3 : Digest -> Digest -> Entry -> Digest :=
+  fun (t : Digest) (d : Digest) (e : Entry) => hash (hash t d) e
+def chainFrom : Digest -> Record -> Digest :=
+  fun (d : Digest) (r : Record) => fmChain Entry Digest u256IsSet (fun (h : Digest) (x : Entry) => H3 tagAppend h x) d r
+def head : Record -> Digest :=
+  fun (r : Record) => chainFrom (hash tagGenesis 0u) r
+-- The guest names of the L2 successor and the L5 result (Q-S5-10 (a)).
+def opSucc : OpPos -> OpPos := fun (n : OpPos) => natAdd n 1
+def Verdict : Type 0 := Flag
+def verdictYes : Verdict := flagYes
+-- verify e r (Q-S5-9 (a)): the position of the first entry e of r, or
+-- none. The fold runs from the last entry to the first with a found code:
+-- 0 is none, j + 1 is the position j (foundAt).
+def foundAt : Nat -> Option OpPos :=
+  fun (f : Nat) => flagIf (natEq f 0) none (some (natSub f 1))
+def verify : Entry -> Record -> Option OpPos :=
+  fun (e : Entry) (r : Record) =>
+    foundAt (fmRun Entry Nat natIsSet (fun (x : Entry) (f : Nat) => flagIf (u256Eq x e) 1 (flagIf (natEq f 0) 0 (natAdd f 1))) 0 r)
+-- prefix r s (Q-S5-5 (a)): s is r and then a rest t, by a path.
+def prefix : Record -> Record -> Type 0 :=
+  fun (r : Record) (s : Record) => Sigma (t : Record) (Path Record (fmMul Entry r t) s)
+-- An inclusion proof (Q-S5-5 (a)): the head before position p and the
+-- entries from p to the end. recTake p r keeps the entries before p and
+-- recDrop p r the entries from p. verifyAt e inc h is verdictYes when the
+-- first entry of the suffix is e and the chain from inclBefore over the
+-- suffix ends at h.
+family Inclusion := inclusionOf (inclBefore : Digest) (inclSuffix : Record)
+def recTake : OpPos -> Record -> Record :=
+  fun (p : OpPos) (r : Record) => fmRun Entry (Nat -> Record) (isSetFun Nat Record (fmIsSet Entry))
+    (fun (x : Entry) (b : Nat -> Record) (n : Nat) => flagIf (natLe p n) (fmUnit Entry) (fmCons Entry x (b (natAdd n 1))))
+    (fun (n : Nat) => fmUnit Entry) r 0
+def recDrop : OpPos -> Record -> Record :=
+  fun (p : OpPos) (r : Record) => fmRun Entry (Nat -> Record) (isSetFun Nat Record (fmIsSet Entry))
+    (fun (x : Entry) (b : Nat -> Record) (n : Nat) => flagIf (natLe p n) (fmCons Entry x (b (natAdd n 1))) (b (natAdd n 1)))
+    (fun (n : Nat) => fmUnit Entry) r 0
+def inclusion : OpPos -> Record -> Inclusion :=
+  fun (p : OpPos) (r : Record) => inclusionOf (head (recTake p r)) (recDrop p r)
+def verifyAt : Entry -> Inclusion -> Digest -> Verdict :=
+  fun (e : Entry) (inc : Inclusion) (h : Digest) =>
+    elim (fun (u : Inclusion) => Flag)
+      (fun (b : Digest) (s : Record) => flagIf (fmRun Entry Flag flagIsSet (fun (x : Entry) (f : Flag) => u256Eq x e) flagNo s) (u256Eq (chainFrom b s) h) flagNo) inc
 -- The encrypted values (S5, USER rulings Q3 (a) and Q-S5-1 .. Q-S5-3 (a),
 -- rule O7): the identity cell monad with a sealed eliminator. A guest elim,
 -- fold or projection of Enc, or a use of a law def (decrypt, observe),

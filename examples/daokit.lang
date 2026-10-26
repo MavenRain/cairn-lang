@@ -381,9 +381,12 @@ def reactor : Addr := 0x0000000000000000000000000072656163746f72
 def nextWindow : (s : State) -> (m : U256) -> U256 :=
   fun (s : State) (m : U256) => flagIf (u256Le m (u256Sub (casts s) m)) (window s) (proposal s)
 
+-- The event of enact (S5 O15): the reactor and the new window.
+event Enacted (target : Addr) (window : U256)
+
 -- Entry enact (15 words): seq > castEnd, not enacted, m <= casts, the opening of T0 (two DLEQ shares of {1, 2}),
--- then the window moves to nextWindow, enacted is set, and one pay pushes the window to the reactor (the
--- ERC-20 transfer selector; the to word is not read).
+-- then the window moves to nextWindow, enacted is set, and the event Enacted logs the reactor and the new
+-- window (S5 O15: Out has no token transfer).
 def enact : (env : Env) -> (s : State) -> (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2x a2y b2x b2y z2 m : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2x a2y b2x b2y z2 m : U256) =>
     flagIf (u256Le (seq s) (castEnd s))
@@ -396,7 +399,7 @@ def enact : (env : Env) -> (s : State) -> (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2
             (some (pair (makeState (used s) (pend s) (stage s)
               (t0ax s) (t0ay s) (t0bx s) (t0by s) (t1ax s) (t1ay s) (t1bx s) (t1by s)
               (casts s) (castEnd s) (proposal s) (nextWindow s m)
-              flagYes (keys s) (fills s) (u256Add (seq s) 1u)) (cons (pay reactor reactor (nextWindow s m)) nil)))
+              flagYes (keys s) (fills s) (u256Add (seq s) 1u)) (cons (Enacted reactor (nextWindow s m)) nil)))
             none)
           none))
 

@@ -156,7 +156,7 @@ repository owner has not ruled on it.
 
 `domain/domain.lang` holds the families and the operations of the domain.
 Only this file can declare a `family` (rule R1). `domain/README.md` tells
-how to replace the sample domain.
+what the domain holds and how to change it.
 
 ## Gate
 

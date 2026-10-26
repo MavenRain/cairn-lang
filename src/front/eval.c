@@ -27,7 +27,7 @@ static const char *const OP_NAMES[] = {
   [OP_FLAG_IF] = "flagIf", [OP_U256_ADD] = "u256Add", [OP_U256_SUB] = "u256Sub",
   [OP_U256_LE] = "u256Le",
   [OP_U256_EQ] = "u256Eq", [OP_TO_U256] = "toU256",
-  [OP_NAT_DIV] = "natDiv", [OP_NAT_MOD] = "natMod", [OP_FM_LEN] = "len", [OP_HASH] = "hash",
+  [OP_NAT_DIV] = "natDiv", [OP_NAT_MOD] = "natMod", [OP_HASH] = "hash",
   [OP_EC_ADD] = "ecAdd", [OP_EC_MUL] = "ecMul", [OP_ADDR_TO_U256] = "addrToU256",
   [OP_ADDR_EQ] = "addrEq", [OP_PROJ] = "?", [OP_KMAP] = "Map", [OP_KMAP_OF] = "mapOf",
   [OP_KMAP_GET] = "mapGet", [OP_KMAP_SET] = "mapSet",
@@ -35,6 +35,7 @@ static const char *const OP_NAMES[] = {
   [OP_ZK_SIGN] = "zkSign", [OP_ZK_VERIFY] = "zkVerify",
   [OP_ZK_BALLOT] = "ZkBallot", [OP_ZK_WITNESS] = "ZkWitness", [OP_ZK_CAST] = "zkCast",
   [OP_ZK_PROVE] = "zkProve", [OP_ZK_PROJECT] = "zkProject", [OP_ZK_CHECK] = "zkCheck",
+  [OP_NAT_IS_SET] = "natIsSet", [OP_U256_IS_SET] = "u256IsSet", [OP_FLAG_IS_SET] = "flagIsSet",
   [OP_INTERVAL] = "I", [OP_TRANSP] = "transp",
   [OP_SYSTEM] = "system", [OP_HCOMP] = "hcomp", [OP_FIN] = "Fin",
   [OP_FIN_ADD] = "finAdd", [OP_FIN_NEG] = "finNeg", [OP_FIN_CASE] = "finCase",
@@ -56,11 +57,12 @@ static const unsigned char OP_ARITY[] = {
   [OP_NAT_EQ] = 2, [OP_NAT_LE] = 2, [OP_FLAG_IF] = 3, [OP_U256_ADD] = 2,
   [OP_U256_SUB] = 2, [OP_U256_LE] = 2,
   [OP_U256_EQ] = 2, [OP_TO_U256] = 1, [OP_ADDR_EQ] = 2,
-  [OP_NAT_DIV] = 2, [OP_NAT_MOD] = 2, [OP_FM_LEN] = 2, [OP_HASH] = 2,
+  [OP_NAT_DIV] = 2, [OP_NAT_MOD] = 2, [OP_HASH] = 2,
   [OP_EC_ADD] = 2, [OP_EC_MUL] = 2, [OP_ADDR_TO_U256] = 1,
   [OP_PROJ] = 1, [OP_KMAP] = 2, [OP_KMAP_OF] = VARIES, [OP_KMAP_GET] = 3, [OP_KMAP_SET] = 4,
   [OP_ZK_HP] = 1, [OP_ZK_KEY] = 1, [OP_ZK_DIGEST] = 1, [OP_ZK_SIGN] = 4, [OP_ZK_VERIFY] = 4,
   [OP_ZK_BALLOT] = 1, [OP_ZK_WITNESS] = 0, [OP_ZK_CAST] = 4, [OP_ZK_PROVE] = 1, [OP_ZK_PROJECT] = 2, [OP_ZK_CHECK] = 4,
+  [OP_NAT_IS_SET] = 0, [OP_U256_IS_SET] = 0, [OP_FLAG_IS_SET] = 0,
   [OP_INTERVAL] = 0, [OP_TRANSP] = 3,
   [OP_SYSTEM] = VARIES, [OP_HCOMP] = 4, [OP_FIN] = 1, [OP_FIN_ADD] = 3,
   [OP_FIN_NEG] = 2, [OP_FIN_CASE] = VARIES, [OP_GLUE] = 3, [OP_GLUE_ELEM] = 3,
@@ -1274,76 +1276,6 @@ static const Value *nat_add(Machine *m, const Value *const *a, uint32_t n) {
   if (!nat_args(m, OP_NAT_ADD, a, n, &x, &y, &out))
     return out;
   return x + y < x ? overflow(m) : val_nat(m, x + y);
-}
-
-/* len A X (S3, survey section 7): the op count of the FreeMon value
-   X = A[1]. fmEta counts 1, fmUnit 0, fmMul the sum of its sides. A path
-   constructor counts one end (the laws keep the count): fmAssoc the sum of
-   its 3 fields; fmUnitL and fmUnitR the count of their first field.
-   An open fmSquash or hcomp with active faces stays stuck: its boundary
-   can be a neutral path application whose count is not yet known. An
-   hcomp with a false face counts its base. */
-static const Value *fm_len(Machine *m, const Value *const *a, uint32_t n);
-
-/* The sum of the counts of the fields FIRST .. FIRST + COUNT - 1 of
-   X = A[1], with the overflow of nat_add. A neutral count makes the len of
-   X stuck. */
-static const Value *fm_len_sum(Machine *m, const Value *const *a, uint32_t n, uint32_t first, uint32_t count) {
-  const Value *x = a[1];
-  const Value *part;
-  const Value *sub[2];
-  uint64_t sum = 0;
-  uint32_t i;
-  if (first + count > x->argc)
-    return internal(m, "a len of a constructor with too few fields");
-  if (!enter(m))
-    return NULL;
-  sub[0] = a[0];
-  for (i = 0; i < count; i++) {
-    sub[1] = x->args[first + i];
-    part = fm_len(m, sub, 2u);
-    if (part == NULL || part->kind != VAL_NAT) {
-      m->depth--;
-      return part == NULL || part->kind == VAL_TRAP ? part : val_op(m, VAL_STUCK, OP_FM_LEN, 0, 0, a, n);
-    }
-    if (sum + part->nat < sum) {
-      m->depth--;
-      return overflow(m);
-    }
-    sum += part->nat;
-  }
-  m->depth--;
-  return val_nat(m, sum);
-}
-
-static const Value *fm_len(Machine *m, const Value *const *a, uint32_t n) {
-  const Value *x = a[1];
-  const Value *out;
-  const char *name;
-  uint32_t p;
-  if (x == NULL)
-    return NULL;
-  if (blocked(m, x, OP_FM_LEN, 0, 0, a, n, &out))
-    return out;
-  if (val_is(x, OP_HCOMP) && x->argc == 4u)
-    return ival_is_end(x->args[1], 0) ? fm_len_sum(m, a, n, 3u, 1u) : val_op(m, VAL_STUCK, OP_FM_LEN, 0, 0, a, n);
-  if (!val_is(x, OP_CTOR) || x->inst >= m->ctor_count || m->ctors[x->inst].family >= m->family_count)
-    return internal(m, "a len of a value that is not a FreeMon constructor");
-  name = m->ctors[x->inst].name;
-  p = m->families[m->ctors[x->inst].family].param_count;
-  if (strcmp(name, "fmEta") == 0)
-    return val_nat(m, 1);
-  if (strcmp(name, "fmUnit") == 0)
-    return val_nat(m, 0);
-  if (strcmp(name, "fmMul") == 0)
-    return fm_len_sum(m, a, n, p, 2u);
-  if (strcmp(name, "fmAssoc") == 0)
-    return fm_len_sum(m, a, n, p, 3u);
-  if (strcmp(name, "fmUnitL") == 0 || strcmp(name, "fmUnitR") == 0)
-    return fm_len_sum(m, a, n, p, 1u);
-  if (strcmp(name, "fmSquash") == 0)
-    return val_op(m, VAL_STUCK, OP_FM_LEN, 0, 0, a, n);
-  return internal(m, "a len of a constructor of another family");
 }
 
 static const Value *nat_sub(Machine *m, const Value *const *a, uint32_t n) {
@@ -2624,7 +2556,6 @@ static const Value *transp_data(Machine *m, const Value *head, const Value *line
   case OP_ADDR_EQ:
   case OP_NAT_DIV:
   case OP_NAT_MOD:
-  case OP_FM_LEN:
   case OP_HASH:
   case OP_EC_ADD:
   case OP_EC_MUL:
@@ -2650,6 +2581,9 @@ static const Value *transp_data(Machine *m, const Value *head, const Value *line
   case OP_FIN_CASE:
   case OP_GLUE_ELEM:
   case OP_UNGLUE:
+  case OP_NAT_IS_SET:
+  case OP_U256_IS_SET:
+  case OP_FLAG_IS_SET:
     return internal(m, "a transport along a line that is not a type");
   }
   return transp_stuck(m, line, phi, base);
@@ -3615,8 +3549,6 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   case OP_NAT_DIV:
   case OP_NAT_MOD:
     return nat_divmod(m, op, a, n);
-  case OP_FM_LEN:
-    return fm_len(m, a, n);
   case OP_HASH:
     return hash_words(m, a, n);
   case OP_ADDR_TO_U256:
@@ -3642,6 +3574,10 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
     return zk_project(m, a, n);
   case OP_ZK_CHECK:
     return zk_check(m, a, n);
+  case OP_NAT_IS_SET: /* S5: a trusted constant has no rule, so it stays stuck */
+  case OP_U256_IS_SET:
+  case OP_FLAG_IS_SET:
+    return val_op(m, VAL_STUCK, op, 0, 0, a, n);
   case OP_FLAG_IF:
     return reduce_flag_if(m, a, n);
   case OP_PROJ:

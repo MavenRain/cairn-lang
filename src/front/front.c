@@ -11,9 +11,7 @@
 
 static const char kit_source[] =
   "family Env := makeEnv (caller : Addr)\n"
-  "family Out := pay (payToken : Addr) (payTo : Addr) (payAmount : U256)\n"
-  "  | pull (pullToken : Addr) (pullFrom : Addr) (pullTo : Addr) (pullAmount : U256)\n"
-  "  | emit (emitTag : Nat) (emitFields : List U256)\n";
+  "family Out := emit (emitTag : Nat) (emitFields : List U256)\n";
 
 static int load_one(Arena *arena, const char *source, Origin origin, const char *text, size_t len, DeclList *out, Diag *diag) {
   TokenList toks;

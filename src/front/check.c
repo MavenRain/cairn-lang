@@ -104,7 +104,6 @@ typedef enum {
   RULE_TRANSP,
   RULE_HCOMP,
   RULE_NAT2,
-  RULE_LEN, /* S3: len A r (survey section 7) */
   RULE_U256_2,
   RULE_ADDR2,
   RULE_TO_U256,
@@ -121,7 +120,8 @@ typedef enum {
   RULE_ZK_CAST,    /* S8 B2b: zkCast M C m c */
   RULE_ZK_PROVE,   /* zkProve b */
   RULE_ZK_PROJECT, /* zkProject C b */
-  RULE_ZK_CHECK    /* zkCheck M C w c */
+  RULE_ZK_CHECK,   /* zkCheck M C w c */
+  RULE_IS_SET      /* S5: natIsSet, u256IsSet, flagIsSet */
 } Rule;
 
 typedef struct {
@@ -202,7 +202,6 @@ static const Builtin BUILTINS[] = {
   {"mapSet", 3, RULE_KMAP_SET, OP_KMAP_SET, OP_KMAP, 0, VIS_INTERNAL},
   {"natDiv", 2, RULE_NAT2, OP_NAT_DIV, OP_NAT, 0, VIS_INTERNAL},
   {"natMod", 2, RULE_NAT2, OP_NAT_MOD, OP_NAT, 0, VIS_INTERNAL},
-  {"len", 2, RULE_LEN, OP_FM_LEN, OP_NAT, 0, VIS_GUEST},
   {"hash", 2, RULE_U256_2, OP_HASH, OP_U256, 0, VIS_INTERNAL},
   {"ecAdd", 2, RULE_FIXED, OP_EC_ADD, OP_PROD, 0, VIS_INTERNAL},
   {"ecMul", 2, RULE_FIXED, OP_EC_MUL, OP_PROD, 0, VIS_INTERNAL},
@@ -217,7 +216,10 @@ static const Builtin BUILTINS[] = {
   {"zkCast", 4, RULE_ZK_CAST, OP_ZK_CAST, OP_ZK_BALLOT, 0, VIS_INTERNAL},
   {"zkProve", 1, RULE_ZK_PROVE, OP_ZK_PROVE, OP_ZK_WITNESS, 0, VIS_INTERNAL},
   {"zkProject", 2, RULE_ZK_PROJECT, OP_ZK_PROJECT, OP_NAT, 0, VIS_INTERNAL},
-  {"zkCheck", 4, RULE_ZK_CHECK, OP_ZK_CHECK, OP_NAT, 0, VIS_INTERNAL}
+  {"zkCheck", 4, RULE_ZK_CHECK, OP_ZK_CHECK, OP_NAT, 0, VIS_INTERNAL},
+  {"natIsSet", 0, RULE_IS_SET, OP_NAT_IS_SET, OP_NAT, 0, VIS_INTERNAL},
+  {"u256IsSet", 0, RULE_IS_SET, OP_U256_IS_SET, OP_U256, 0, VIS_INTERNAL},
+  {"flagIsSet", 0, RULE_IS_SET, OP_FLAG_IS_SET, OP_FLAG, 0, VIS_INTERNAL}
 };
 
 #define BUILTIN_COUNT ((uint32_t)(sizeof BUILTINS / sizeof BUILTINS[0]))
@@ -2194,21 +2196,6 @@ static const Core *rule_prim(Call *k, Op arg) {
 
 static uint32_t find_family(const Machine *m, const char *name);
 
-/* len A r (S3, USER ruling Q-S3-3 (a)): the op count of the trace
-   r : FreeMon A, a Nat (an OpPos). A C builtin: the domain cannot prove
-   the Nat monoid laws that fmFold needs (S3 survey section 7). */
-static const Core *rule_len(Call *k) {
-  Checker *c = k->c;
-  uint32_t fam = find_family(c->m, "FreeMon");
-  const Core *args[2];
-  const Value *a;
-  args[0] = check(c, k->args[0], val_univ(c->m, 0));
-  a = here(c, args[0]);
-  args[1] = a == NULL || fam >= c->m->family_count ? NULL : check(c, k->args[1], val_op(c->m, VAL_OP, OP_FAMILY, fam, 0, &a, 1));
-  k->type = tyop(c, OP_NAT, 0, NULL, NULL, NULL);
-  return args[1] == NULL ? NULL : core_op(c, OP_FM_LEN, 0, 0, args, 2);
-}
-
 /* The curve ops (S2, R17) and the zk ops (S8 B2a): fixed signatures over
    U256, Nat, a point Prod U256 U256, a ring List of points and a word list
    List U256. The result is the row result; OP_PROD in the row means a point
@@ -2374,6 +2361,31 @@ static const Core *kmap_access(Call *k, int set) {
   return core_op(c, k->b->op, 0, 0, args, set ? 4u : 3u);
 }
 
+/* natIsSet, u256IsSet, flagIsSet (S5, Q-S5-6 (b)): the trusted constant
+   (x y : C) -> (p q : Path C x y) -> Path (Path C x y) p q.
+   Build its type without consulting domain definitions: the name isSet
+   must not let domain text change a kernel axiom. The core stays opaque. */
+static const Core *rule_is_set(Call *k) {
+  Checker *c = k->c;
+  const Core *carrier = op3(c, k->b->result, 0, 0, NULL, NULL, NULL);
+  const Core *p_type = core_ends(c, CORE_PATHP, "_", NULL, carrier,
+    core_index(c, CORE_VAR, 1), core_index(c, CORE_VAR, 0));
+  const Core *q_type = core_ends(c, CORE_PATHP, "_", NULL, carrier,
+    core_index(c, CORE_VAR, 2), core_index(c, CORE_VAR, 1));
+  /* Under x, y, p, q and the outer path interval, x and y have indices 4, 3. */
+  const Core *line = core_ends(c, CORE_PATHP, "_", NULL, carrier,
+    core_index(c, CORE_VAR, 4), core_index(c, CORE_VAR, 3));
+  const Core *square = core_ends(c, CORE_PATHP, "_", NULL, line,
+    core_index(c, CORE_VAR, 1), core_index(c, CORE_VAR, 0));
+  k->type = here(c, core_bind(c, CORE_PI, "x", carrier,
+    core_bind(c, CORE_PI, "y", carrier,
+      core_bind(c, CORE_PI, "p", p_type,
+        core_bind(c, CORE_PI, "q", q_type, square)))));
+  if (k->type == NULL)
+    return NULL;
+  return op3(c, k->b->op, 0, 0, NULL, NULL, NULL);
+}
+
 static const Core *rule(Call *k) {
   switch (k->b->rule) {
   case RULE_TYPE0:
@@ -2450,8 +2462,6 @@ static const Core *rule(Call *k) {
   case RULE_NAT2:
   case RULE_TO_U256:
     return rule_prim(k, OP_NAT);
-  case RULE_LEN:
-    return rule_len(k);
   case RULE_U256_2:
     return rule_prim(k, OP_U256);
   case RULE_ADDR2:
@@ -2478,6 +2488,8 @@ static const Core *rule(Call *k) {
     return rule_zk_project(k);
   case RULE_ZK_CHECK:
     return rule_zk_check(k);
+  case RULE_IS_SET:
+    return rule_is_set(k);
   }
   return NULL;
 }

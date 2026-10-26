@@ -80,7 +80,7 @@ static int normal_roundtrip_in(const char *domain_text, const char *type, const 
     && parse_source(&arena, "test-roundtrip", ORIGIN_DOMAIN, &tokens, &decls, &diag)
     && check_program(&arena, &decls, &machine, &diag, CHECK_KIT);
   if (ok)
-    ok = value_print(&machine, NULL, 0, def_value(&machine, 0), normal, sizeof normal);
+    ok = value_print(&machine, NULL, 0, def_value(&machine, machine.def_count - 1u), normal, sizeof normal);
   if (!ok) {
     fputs("FAIL normal roundtrip: ", stderr);
     diag_print(&diag, stderr);
@@ -96,12 +96,22 @@ static int normal_roundtrip(const char *type, const char *body) {
   return normal_roundtrip_in("", type, body);
 }
 
+/* len is a domain fold since S5 (O16), so the mini domain gives the same
+   fold over its three cells: an op counts 1, the unit 0, a squash by
+   natIsSet. */
 static int len_roundtrip(const char *type, const char *body) {
   return normal_roundtrip_in(
     "family FreeMon (A : Type 0) := fmEta (fmEtaOf : A) | fmUnit\n"
     "  | fmSquash (fmFrom : FreeMon A) (fmTo : FreeMon A)"
     " (fmPathL : Path (FreeMon A) fmFrom fmTo) (fmPathR : Path (FreeMon A) fmFrom fmTo) (i : I) (j : I)\n"
-    "    [ ~i -> fmPathL @ j, i -> fmPathR @ j, ~j -> fmFrom, j -> fmTo ]\n",
+    "    [ ~i -> fmPathL @ j, i -> fmPathR @ j, ~j -> fmFrom, j -> fmTo ]\n"
+    "def isProp : (A : Type 0) -> Type 0 :=\n"
+    "  fun (A : Type 0) => (x : A) -> (y : A) -> Path A x y\n"
+    "def isSet : (A : Type 0) -> Type 0 :=\n"
+    "  fun (A : Type 0) => (x : A) -> (y : A) -> isProp (Path A x y)\n"
+    "def len : (A : Type 0) -> FreeMon A -> Nat :=\n"
+    "  fun (A : Type 0) (r : FreeMon A) => fold (fun (a : A) => 1) 0\n"
+    "    (fun (x : Nat) (y : Nat) (p : Path Nat x y) (q : Path Nat x y) => fun (i : I) => fun (j : I) => (natIsSet x y p q @ i) @ j) r\n",
     type, body);
 }
 
@@ -258,6 +268,17 @@ static int prove_output(int trap, int broken, const char *poll) {
 
 int main(void) {
   int ok = 1;
+  /* Kernel set constants have fixed types, even without the domain aliases. */
+  ok &= domain("def s : (x y : Nat) -> (p q : Path Nat x y) -> Path (Path Nat x y) p q := natIsSet", NULL);
+  ok &= domain("def s : (x y : U256) -> (p q : Path U256 x y) -> Path (Path U256 x y) p q := u256IsSet", NULL);
+  ok &= domain("def s : (x y : Flag) -> (p q : Path Flag x y) -> Path (Path Flag x y) p q := flagIsSet", NULL);
+  ok &= domain("def isSet : Type 0 -> Type 0 := fun A => Path Nat 0 1\n"
+                "def forged : Path Nat 0 1 := natIsSet", "TYPE_MISMATCH");
+  ok &= domain("def isSet : Type 0 -> Type 0 := fun A => Path Nat 0 1\n"
+                "def forged : Path Nat 0 1 := u256IsSet", "TYPE_MISMATCH");
+  ok &= domain("def isSet : Type 0 -> Type 0 := fun A => Path Nat 0 1\n"
+                "def forged : Path Nat 0 1 := flagIsSet", "TYPE_MISMATCH");
+  ok &= domain("def bound : (A : Type 0) -> (z : A) -> (x y : Nat) -> (p q : Path Nat x y) -> Path (Path Nat x y) p q := fun A z => natIsSet", NULL);
   /* Time words are forbidden in local scopes as well as declarations. */
   ok &= domain("def bad : (now : Nat) -> Nat := fun x => x", "REFUSE_TIME");
   ok &= domain("def bad : Nat -> Nat := fun clock => clock", "REFUSE_TIME");

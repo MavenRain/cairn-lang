@@ -1,0 +1,38 @@
+-- The record (S5, Part R): a trace of entries, each entry a digest. The file
+-- is a guest: it names the domain defs only. The entries are head digests and
+-- the positions come from len and opSucc (no literal).
+def r0 : Record := fmUnit Entry
+def e1 : Entry := head r0
+def r1 : Record := snoc e1 r0
+def e2 : Entry := head r1
+def r2 : Record := snoc e2 r1
+def e3 : Entry := head r2
+def r3 : Record := snoc e3 r2
+def rDup : Record := snoc e1 r2
+def p1 : OpPos := opSucc (len Entry r0)
+
+-- L1 (Q-S5-5 (a)): r is a prefix of snoc e r, the rest is fmEta e.
+def l1 : (e : Entry) -> (r : Record) -> prefix r (snoc e r) :=
+  fun (e : Entry) (r : Record) => pack (fmEta Entry e) refl
+-- L2: snoc adds one to the length.
+def l2 : (e : Entry) -> (r : Record) -> Path OpPos (len Entry (snoc e r)) (opSucc (len Entry r)) :=
+  fun (e : Entry) (r : Record) => refl
+-- L3: the head of snoc e r is one H3 step from the head of r.
+def l3 : (e : Entry) -> (r : Record) -> Path Digest (head (snoc e r)) (H3 tagAppend (head r) e) :=
+  fun (e : Entry) (r : Record) => refl
+-- L4 and L5 on fixed records: they need u256Eq e e to reduce, thus e is a closed digest.
+def l4 : Path (Option OpPos) (verify e2 (snoc e2 r1)) (some (len Entry r1)) := refl
+def l5 : Path Verdict (verifyAt e2 (inclusion p1 r2) (head r2)) verdictYes := refl
+
+-- Eval rows: the head of 0, 1 and 2 entries, the length, verify and verifyAt.
+def headZero : Digest := head r0
+def headOne : Digest := head r1
+def headTwo : Digest := head r2
+def lenZero : OpPos := len Entry r0
+def lenThree : OpPos := len Entry r3
+def verifyHit : Option OpPos := verify e2 r2
+def verifyMiss : Option OpPos := verify e3 r2
+def verifyFirst : Option OpPos := verify e1 rDup
+def verifyAtYes : Verdict := verifyAt e2 (inclusion p1 r2) (head r2)
+def verifyAtEntry : Verdict := verifyAt e1 (inclusion p1 r2) (head r2)
+def verifyAtHead : Verdict := verifyAt e2 (inclusion p1 r2) (head r1)

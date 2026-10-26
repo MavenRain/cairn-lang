@@ -16,8 +16,11 @@ at 67445ae is ported, without the EVM writer and the swap (section 9).
 S3 DONE: the clock parts are gone, with `REFUSE_TIME`, `OpPos` and
 `len` (sections 4 and 9). S4 DONE: the Sigma, ElGamal, threshold and bLSAG
 code runs on secp256k1 through `group.h`, the hash is SHA-256, and the
-BN254 and Keccak code is gone (sections 6.1 and 9). Next: S5 (Part R, the
-record).
+BN254 and Keccak code is gone (sections 6.1 and 9). S5 DONE: the record
+is a hash chain on SHA-256 (`snoc`, `head`, `len`, `verify`, `Inclusion`,
+`verifyAt`), the kernel checks laws L1 to L5 as paths (L4 and L5 on closed
+entries, O19), and `Out` has `emit` only (sections 9 and 10). Next: S6
+(Part D, the ballot and the DKG).
 
 ## 1. Rulings
 
@@ -29,6 +32,7 @@ record).
 | 2026-10-25 | S1, verbatim: "Take recommendations". So each S0 question takes (a): Q-S0-1 additive exponential ElGamal; Q-S0-2 secp256k1; Q-S0-3 SHA-256; Q-S0-4 the `tOpen`-th valid share closes a ballot; Q-S0-5 one threshold Schnorr signature (FROST style) under `keyAppend`; Q-S0-6 the hash chain; Q-S0-7 Pedersen DKG with Feldman commitments and a proof of knowledge, and the same for reshare; Q-S0-8 the Anthropic `count_tokens` endpoint; Q-S0-9 the Python and Rust programs run, with equal outputs. | USER, S1 |
 | 2026-10-26 | S3: Q-S3-1 to Q-S3-3 each take (a). Q-S3-1: the kit prelude keeps `family Env := makeEnv (caller : Addr)` without `now` and `block`; `contract.c` and `contract.h` go, the prelude text moves into `src/front/front.c`, and `langc run` calls are `CALLER NAME ARGS`. Q-S3-2: `Out` (`pay`, `pull`, `emit`) stays until S5 (O15). Q-S3-3: the bag family `Pos` stays, and the trace position is `def OpPos : Type 0 := Nat` (section 4). | USER, S3 |
 | 2026-10-26 | S4, verbatim: "Take all recommendations for Q-S4-*". So Q-S4-1 to Q-S4-7 each take (a). Q-S4-1: the bLSAG key image keeps try-and-increment on secp256k1 (x = H(...) mod p, accept when x^3 + 7 is a square, sqrt = a^((p + 1) / 4)). Q-S4-2: `ecPairing` goes (`OP_EC_PAIRING`, the rows `base-ecpairing` and `pairing-list`, the precompile `g2`, `pairOk`, `pairNil`). Q-S4-3: each example writes G as a `pair` of the two SEC 2 U256 words; there is no `ecGen` op. Q-S4-4: `examples/bn254.lang` becomes `examples/secp256k1.lang` with the SEC 2 p and n; `precompile.lang` stays, less its `ecPairing` and `ecrecover` defs. Q-S4-5: the SHA-256 vector of the empty string comes from the NIST CAVP file `SHA256ShortMsg.rsp` (`Len = 0`). Q-S4-6: the bLSAG tag is "cairn" (O5). Q-S4-7: a new `test/shatool.c` (the FIPS vectors), and `test/secptool.c` is the group tool (the SEC 2 checks). Later in S4, Q-S4-8 (a): the `range2` row of `zk.lang` uses s = r = n, the smallest scalar out of range. Q-S4-9 (b): the row for a point on the curve that is not the key image uses I = n G through the new def `curveG : Nat -> Flag`; the row `zk curveG 1 => 0` replaces `zk curve2 2 => 0`, because (1, y) with y^2 = 8 needs a 77-digit y and an eval Nat argument stops at 2^64 - 1. | USER, S4 |
+| 2026-10-26 | S5, verbatim: "Take all recs (Recommended)". So Q-S5-1 to Q-S5-9 each take the survey rec, (a) for each except Q-S5-6 (b). Q-S5-1: a total `snoc` (the entry at the end), the laws on `snoc`, `append a e r` reads as `some (snoc e r)`. Q-S5-2: `append` with `Constitution` and `Auth` comes in S7 as one def over `snoc`. Q-S5-3: `H3 t d e := hash (hash t d) e`, no new op. Q-S5-4: the tags are the ASCII bytes of "cairn-genesis" and "cairn-append" as a big-endian U256. Q-S5-5: `Digest := U256` and `Entry := Digest` (aliases), `prefix` by the kernel Sigma, the family `Inclusion`. Q-S5-6 (b): three opaque constants `natIsSet`, `u256IsSet`, `flagIsSet` (TRUSTED), `head`, `len` and `verify` are domain folds, O16 closes. Q-S5-7: `pay` and `pull` leave the prelude, `Out` keeps `emit`, the host append goes to S7. Q-S5-8: `examples/record.lang` and the domain README, the seed example goes. Q-S5-9: the record position is `OpPos`. Later in S5, Q-S5-10 (a), verbatim "Domain aliases (Recommended)": `examples/record.lang` is a guest (no word literal, no `Flag`, no `natAdd`), so the domain adds `opSucc`, `Verdict := Flag` and `verdictYes`, and the guest entries are `head` digests. | cairn-lang-work/S5-survey.md sections 3 and 6 |
 
 The seed is `bin/new-lang.sh cairn-lang tcc-wasm` from lang-template
 5265a2a. Native code is not a target (the USER did not pick it).
@@ -318,8 +322,8 @@ mutant of it, as in intent-lang.
 | S2 | Port the intent-lang kernel at 67445ae (6.1). Survey first: SAME, CHANGED, INTENT-ONLY. Targets = the intent-lang counts less the EVM and swap rows. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 189, kit-only refusals 24, evals 215, proves 2, build refusals 1 (new), guest differential 28, runs 7, run refusals 11, 11 tool regressions passed. Each count is at its target (`cairn-lang-work/S2-survey.md`). |
 | S3 | No time: remove the clock parts (4), add `REFUSE_TIME`, `OpPos` and `len`. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 195, kit-only refusals 24, evals 218, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1 (new), 11 tool regressions passed. Each count is at its target (`cairn-lang-work/S3-survey.md` section 4; examples 53 with the new `examples/oppos.lang`). Mutants KILLED: `epoch` out of `TIME_WORDS`; `fmEta` counts 2. `len` is a C builtin (section 4). |
 | S4 | The group and the hash (Q-S0-2 (a), Q-S0-3 (a)): a group interface `group.h` for the Sigma, ElGamal, threshold and bLSAG code; the secp256k1 field and group; SHA-256 (FIPS 180-4 vectors); remove `bn254.c`. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 192, kit-only refusals 22, evals 216, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 12 tool regressions passed (new: `shatool`). Each count is at its target (`cairn-lang-work/S4-survey.md` section 9). The drops are the ruled removals: check refusals 195 to 192 and kit-only refusals 24 to 22 (`base-ecpairing`, `pairing-list`, `base-ecrecover`), evals 218 to 216 (`recoverGood`, `recoverBad`). Mutants 2/2 KILLED: SHA-256 `K[0]` + 1 (`shatool`, 4 FAIL lines); the curve constant 7 to 5 (`secptool`, 3 FAIL lines). |
-| S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | NEXT |
-| S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | |
+| S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | DONE: `make -B check` EXIT 0; examples 54, parse refusals 19, check refusals 192, kit-only refusals 22, evals 227, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 12 tool regressions passed. Each count is at its target (`cairn-lang-work/S5-survey.md` section 4). The rises are the Part R rows: examples 53 to 54 (`examples/record.lang`), evals 216 to 227 (11 `record` rows; the target said about 226). `append` with `Constitution` and `Auth` moves to S7 (Q-S5-2 (a), O18). Mutants 6/6 KILLED: the `chainFrom` step without `H3 tagAppend`, and `snoc e r := r` (each a `PATH_END` check refusal); `verify` keeps the last position (row `verifyFirst`); `verify` without the `natEq f 0` guard (row `verifyMiss`); `verifyAt` without the first-entry check (row `verifyAtEntry`); the `u256IsSet` result type `U256` to `Nat` in `src/front/check.c` (a `TYPE_MISMATCH` check refusal). |
+| S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | NEXT |
 | S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | |
 | S8 | Wasm: lower the ported core to the IR, the crypto prelude, differential vectors. | |
 | S9 | ES module + JSON: port `js.c` and `json.c`, the BigInt prelude, `REFUSE_TARGET_SECRET`. | |
@@ -371,7 +375,10 @@ mutant of it, as in intent-lang.
   name `intent.lang` and `intentsig.lang`, which S2 removed). S2 did not
   edit the tool. S4 rebuilds the tool on `group.h` and SHA-256, and removes
   the swap vectors then.
-- O12 (S2) The seed example `examples/inventory.lang` uses the seed sample
+- O12 DONE (S5). The seed example and the `examples/seed` directory are
+  gone. `examples/record.lang` is the Part R example, and
+  `domain/README.md` now describes the ported domain. The S2 text:
+  (S2) The seed example `examples/inventory.lang` uses the seed sample
   domain (`Color`, `Item`, `Stack`, `Lot`). Only `domain/domain.lang` can
   declare a family, so the example cannot check under the ported domain.
   S2 moved it, byte for byte, to `examples/seed/inventory.lang`, out of the
@@ -388,16 +395,43 @@ mutant of it, as in intent-lang.
   `abi --text` still parse, and the `Options` fields `out_path`, `runtime`
   and `json` have no use until S8. `langc contract` lived in the removed
   `src/front/writer.c`, so it is now an unknown command (exit 2).
-- O15 (S3, Q-S3-2 (a)) The kit prelude keeps `Out` (`pay`, `pull`,
+- O15 DONE (S5, Q-S5-7 (a)). `pay` and `pull` are gone from the kit
+  prelude. `Out` keeps `emit` and the program events: `deposit` and
+  `withdraw` in `examples/contract.lang` log `Deposited` and `Withdrawn`,
+  and `enactPay` in `examples/daokit.lang` logs `Enacted`. The kit row
+  `test/check/kit-pay.lang` is now `test/check/kit-emit.lang` (a guest
+  `emit`, still `REFUSE_KIT`). The host append is O20 (S7). The S3 text:
+  (S3, Q-S3-2 (a)) The kit prelude keeps `Out` (`pay`, `pull`,
   `emit`) of intent-lang. Off chain there is no token. S5 (Part R)
   replaces `Out` with the record append, and `pay` and `pull` leave then.
-- O16 (S3) `len` is a C builtin (section 4). If a later slice gives the
+- O16 DONE (S5, Q-S5-6 (b)). `len` is a domain fold over `fmFold`
+  (`fmChain` on the trusted `natIsSet`, `domain/domain.lang:158`), and
+  `OP_FM_LEN` is gone from `check.c` and `eval.c`. The `len` rows keep
+  their values. The S3 text:
+  (S3) `len` is a C builtin (section 4). If a later slice gives the
   domain `isSet Nat` and the `natAdd` paths, `len` becomes a domain fold
   over `fmFold`, and `OP_FM_LEN` goes.
 - O17 (S4) `src/front/lower.c` does not compile with clang: `OP_EQ` and
   `OP_REFL` are not declared in the ported `core.h`. This was so before S4.
   The file is out of the build (O13), so the gate does not see it. S8
   adapts the file (6.1).
+- O18 (S5, Q-S5-2 (a)) `append` is not in S5. S5 builds the total
+  `snoc` (the entry goes at the end, Q-S5-1 (a)), `head`, `len`,
+  `verify`, `Inclusion` and `verifyAt`, and states L1 to L5 on `snoc`.
+  S7 adds `append` with `Constitution` and `Auth` as one def over `snoc`:
+  `some (snoc e r)` when the Auth check accepts, else `none`.
+- O19 (S5) L4 and L5 for a variable entry `e` need `u256Eq e e ≡ 1`, and
+  the kernel does not reduce `u256Eq` on a variable. Thus
+  `examples/record.lang` proves L4 and L5 only for closed entries. No
+  slice owns this gap yet.
+- O20 (S5, Q-S5-7 (a)) The host append goes to S7: `langc run` hashes
+  each `Out` value to an `Entry` and appends it to the record under the
+  committee key.
+- O21 (S5) `formers/tcc-wasm.md` is older than `FreeMon`: row F4 still
+  says `List` and cites `src/front/lower.c` lines, but
+  `examples/formers.lang:13` is a `FreeMon` now. S5 changed only the
+  cites to removed or moved lines (F4, F15). S8 (the Wasm lower, O13)
+  updates the file.
 
 ## 11. Questions for the USER (S0)
 

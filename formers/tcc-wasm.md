@@ -14,7 +14,7 @@ time. Types and universes erase on Wasm. Proof contents erase, while their trap 
 | F1 | Product | DONE | `src/front/check.c:94`, `src/front/lower.c:571`, `src/front/lower.c:1125` | `examples/formers.lang:3`, `examples/laws.lang:12` |
 | F2 | Coproduct | DONE | `src/front/check.c:95`, `src/front/check.c:107`, `src/front/lower.c:1133` | `examples/formers.lang:8`, `examples/laws.lang:13` |
 | F3 | Option | DONE | `src/front/check.c:99`, `src/front/check.c:108`, `src/front/lower.c:1135` | `examples/formers.lang:11`, `examples/formers.lang:12` |
-| F4 | List | DONE | `src/front/check.c:100`, `src/front/lower.c:796` | `examples/formers.lang:13`, `examples/inventory.lang:4`, `test/ir/spine.lang:8` |
+| F4 | List | DONE | `src/front/check.c:100`, `src/front/lower.c:796` | `examples/formers.lang:13`, `test/ir/spine.lang:8` |
 | F5 | Monad pure/map/bind | DONE over Option, Sum E and List | `src/front/check.c:109`, `src/front/lower.c:1014`, `src/front/lower.c:1029`, `src/front/lower.c:811`, `src/front/lower.c:826` | `examples/monad.lang:2`, `examples/monad.lang:6`, `examples/monad.lang:8`, `examples/laws.lang:8`, `test/ir/spine.lang:10` |
 | F6 | Algebra fold | DONE over Nat, List and domain families. HOST-LIMIT: a run-time tree | `src/front/check.c:113`, `src/front/lower.c:1064`, `src/front/lower.c:796`, `src/front/lower.c:970`, `src/front/lower.c:990` | `examples/algebra.lang:4`, `examples/algebra.lang:3`, `examples/algebra.lang:6`, `test/ir/spine.lang:18`, `test/ir/tree.lang:3` |
 | F7 | Algebra unfold | DONE into List with a Nat step limit | `src/front/check.c:114`, `src/front/lower.c:898` | `examples/algebra.lang:7`, `examples/algebra.lang:8`, `test/ir/spine.lang:5` |
@@ -25,7 +25,7 @@ time. Types and universes erase on Wasm. Proof contents erase, while their trap 
 | F12 | Eq refl/symm/trans | DONE | `src/front/check.c:102`, `src/front/check.c:115`, `src/front/check.c:116`, `src/front/lower.c:1121` | `examples/equality.lang:4`, `examples/equality.lang:5`, `examples/equality.lang:6`, `test/check/bad-refl.lang:1` |
 | F13 | Eq transport/cong | DONE | `src/front/check.c:117`, `src/front/check.c:118`, `src/front/lower.c:1155`, `src/front/lower.c:1157` | `examples/equality.lang:8`, `examples/equality.lang:9` |
 | F14 | Universes | DONE for Type 0 and Type 1, without cumulativity | `src/front/lower.c:1181` | `examples/universes.lang:4`, `test/check/universe.lang:1`, `test/check/universe-range.lang:1` |
-| F15 | Generic indexed family | PARTIAL: only the domain file declares an indexed family | `domain/domain.lang:10` | `examples/inventory.lang:9`, `examples/laws.lang:16` |
+| F15 | Generic indexed family | PARTIAL: only the domain file declares an indexed family | `domain/domain.lang:252` | `examples/bagorbit.lang:7` |
 
 F6: a fold over a family with one recursive field (for example `Stack`)
 lowers to a loop over the spine. A constructor with two or more recursive

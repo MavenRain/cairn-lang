@@ -26,5 +26,5 @@ in slice S14, with `AGENTS.md` and `SKILL.md`.
   status on the tcc-wasm host.
 - `probe/CAPABILITY.md`: the host probe.
 - `docs/STATUS.md` and `docs/VALIDATION.md`: the status and the gate results.
-- `docs/host/README.md`: how to build and test the host kit, and how to
-  replace the sample domain in `domain/`.
+- `docs/host/README.md`: how to build and test the host kit.
+- `domain/README.md`: what the domain holds and how to change it.

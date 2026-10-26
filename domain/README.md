@@ -1,69 +1,81 @@
-# Domain slot
+# The domain
 
-Replace the sample domain with the design of your language.
-`domain/domain.lang` holds the domain. At build time, `tcc -run
-gen/embed.c` copies it into `build/domain.c`, so the domain is part of
-`build/langc`. `langc` loads the domain first, then the program.
+`domain/domain.lang` holds the domain of cairn-lang: the families and the
+definitions that a program can use. At build time, `tcc -run
+gen/embed.c` copies the file into `build/domain.c`. Thus the domain is
+part of `build/langc`. `langc` loads the domain first, then the kit
+prelude, then the program.
+
+## The rules
+
+- Only this file can declare a family (rule R1). A `family`, a
+  `cofamily` or a `sealed family` in a program gives `REFUSE_DATA`.
+- Only this file can declare a `law def` (rule O7). A `law def` in a
+  program gives `REFUSE_DATA`.
+- Each family, constructor, field and definition name in this file
+  becomes a core name (rule R4). A program cannot use a core name as the
+  name of a new definition (`REFUSE_NAME`).
+- The kit prelude in `src/front/front.c` adds the kit families, for
+  example `Env` and `Out`. A guest program cannot declare them
+  (`REFUSE_KIT`).
+
+## Declaration forms
+
+The file uses these forms.
+
+- `family NAME (param : T)* := ctor (field : T)* | ...`. A constructor
+  takes the parameters first: `fmUnit A`, `fmMul A x y`.
+- An indexed family gives the index of each constructor:
+  `family Pos : Size -> Type 0 := posFirst (firstSize : Size) : Pos (szS firstSize) | ...`.
+- A path constructor takes interval variables `(i : I)` and a boundary
+  in brackets: `loop (i : I) [ ~i -> base, i -> base ]`.
+- `cofamily NAME (param : T)* := corec (destructor : T)*`. For example,
+  `Stream` has the destructors `sHead` and `sTail`.
+- `sealed family NAME ...` and `law def NAME : T := term`: see the guest
+  rules below.
+- `def NAME : T := term`.
+- Line comments start with `--`.
 
 ## What the file holds
 
-- `family` declarations. Only this file can declare a family. In a
-  program, `family` is refused with `REFUSE_DATA` (rule R1).
-- `def` operations, written in the language.
-- Line comments that start with `--`.
+The file has these sections, in this order. A line comment at the start
+of each section gives its rule or ruling.
 
-Each family, constructor, field and definition name in this file becomes
-a core name. A program cannot use one of them as a new definition name
-(rule R4, `REFUSE_NAME`).
+| Section | Names |
+|---|---|
+| The Kan library | `transport`, `subst`, `J`, `JRefl` (all by `transp`), `trans` (by `hcomp`) |
+| Propositions and sets | `isProp`, `isSet`, `isSetFun` (when `B` is a set, `A -> B` is a set) |
+| Higher inductive families | `S1` (the circle), `Trunc1` (the propositional truncation), `Trunc0` (the set truncation) |
+| Sizes and streams | `Size`, the cofamily `Stream` with `sExtend` and `sDuplicate`, the parity quotient `Parity` with `sizeFlip` and `sizeEven` |
+| The empty family and the bag | `Empty`, `Bag` (the free commutative monoid) |
+| The free monoid | `FreeMon`, `fmCons`, `fmIsSet`, `fmFold`, `fmBind`, `fmMap`, `OpPos`, `endoThen`, `fmChain`, `fmRun`, `len` |
+| Part R, the record | `Digest`, `Entry`, `Record`, `snoc`, `tagGenesis`, `tagAppend`, `H3`, `chainFrom`, `head`, `opSucc`, `Verdict`, `verdictYes`, `foundAt`, `verify`, `prefix`, `Inclusion`, `recTake`, `recDrop`, `inclusion`, `verifyAt` |
+| The encrypted values | the sealed family `Enc`, `encBind`, `encMap`, `encOp2`, the law defs `decrypt` and `observe` |
+| Quorum and proofs | `Quorum`, the law def `open`, `ZKProof`, the sealed family `Transcript`, the law def `verified` |
+| Positions, words and orbits | `Pos`, `Word`, `sizePred`, `consP`, `swapFront`, `actW`, `ChoiceBag`, `OrbitN` |
+| The charter | `Charter` (an inductive-inductive family) |
+| Equivalences | `isContr`, `fiber`, `isEquiv`, `Equiv`, `idEquiv`, `isoCap`, `isoPath`, `isoToEquiv`, `ua`, `uaArrow` |
 
-## Family syntax
+## Guest programs and the domain
 
-```
-family NAME (param : T)* := ctor (field : T)* | ctor (field : T)* ...
-```
+- A guest program uses `FreeMon` for a list. The cons list `List` is kit
+  only (the host ABI). A guest `List` gives `REFUSE_CELL`.
+- A guest program cannot name the kit types `Nat`, `U256` and `Flag`
+  (`REFUSE_KIT`). The domain gives guest names for the values that a
+  guest needs: `Digest` and `Entry` for a digest, `OpPos` and `opSucc`
+  for a position, `Verdict` and `verdictYes` for a result.
+- A guest elim, fold or projection of `Enc`, or a use of a law def,
+  outside a `Trunc1` argument makes the guest definition law-only. A
+  law-only definition must have a law type (a `Path` or `Trunc1`
+  codomain), else `REFUSE_LAW`.
+- `examples/record.lang` uses Part R in a guest program. It holds the
+  laws L1 to L5 and the defs of the record rows in
+  `test/eval/expect.txt`.
 
-- A family with only nullary constructors is an enum.
-- A family with one constructor is a record. It gets one projection for
-  each field name.
-- A field can have the type of its own family. Such a field is recursive.
-- A parameter is an index (former F15). A constructor takes the indices
-  first: `makeLot 3 250 : Lot 3`.
-- A `fold` over a family takes one argument for each constructor, in
-  declaration order. A constant constructor takes a value. A constructor
-  with fields takes a function. A recursive field arrives folded.
+## How to change the domain
 
-In the IR, a constructor value is a heap block. Word 0 is the constructor
-index, in declaration order. Each field has a word and a trap flag.
-A `fold` over a family with one recursive field lowers to a loop.
-A family with two or more recursive fields cannot be folded at run time
-(`REFUSE_RUNTIME_TREE`, see `docs/CAPABILITY.md`).
-
-## The sample
-
-| Family | Kind | Use |
-|---|---|---|
-| `Color` | enum: `red`, `green`, `blue` | `isRed`, `colorCode` in `examples/algebra.lang` |
-| `Item` | record: `itemColor`, `itemPrice`, `itemCount` | `lineTotal`, `total`, `redTotal` |
-| `Stack` | one recursive field, `rest` | `depth`, and the spine loop in `test/ir/spine.lang` |
-| `Tree` | two recursive fields | the tree mutant `test/ir/tree.lang` |
-| `Lot (size : Nat)` | indexed record | `examples/inventory.lang`, `examples/laws.lang` |
-
-The definitions are `lineTotal`, `isRed`, `total`, `redTotal` and `depth`.
-
-`family Tree` exists only for the tree mutant. The mutant checks that the
-lowering refuses a fold over a run-time tree. Rule R1 lets only this file
-declare a family, so the family must be here.
-
-## How to replace the domain
-
-1. Write your families and definitions in `domain/domain.lang`. Keep the
-   names apart from the core names in `README.md`.
-2. Change the examples and the tests that use the sample names:
-   `examples/algebra.lang`, `examples/inventory.lang`,
-   `examples/laws.lang`, `test/eval/expect.txt`,
-   `test/check/domain-name.lang`, `test/ir/spine.lang` and
-   `test/ir/tree.lang`.
-3. Keep a family with two recursive fields for `test/ir/tree.lang`, or
-   remove that file and its block in `test/gate.sh`.
-4. Run `make check` in the kit directory. The build makes `build/domain.c`
-   again when `domain/domain.lang` changes.
+1. Edit `domain/domain.lang`. Keep each new name apart from the core
+   names.
+2. Change the examples and the expect files that use a changed name.
+3. Run `make check`. The build makes `build/domain.c` again when
+   `domain/domain.lang` changes.
