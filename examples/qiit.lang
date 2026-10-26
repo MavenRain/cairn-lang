@@ -1,0 +1,28 @@
+-- Inductive-inductive types (S6, O20, USER ruling S6): Charter and
+-- Ratified are one block. A ratification is at a charter, adopt takes a
+-- charter and a rule ratified at it, and adoptTwice is law 4: a second
+-- adoption of the same rule is a path from the first. The rules are Size
+-- values, as Nat is internal.
+def charterZero : Charter := genesis
+def ratifiedZero : Ratified charterZero := ratify charterZero sz0
+def charterOne : Charter := adopt charterZero ratifiedZero
+def charterTwo : Charter := adopt charterOne (ratify charterOne sz0)
+def adoptLaw : Path (Charter) charterOne charterTwo :=
+  fun (i : I) => adoptTwice charterZero sz0 i
+-- The block fold (S6 B3): one target for each sort, then the cases of
+-- Charter (genesis, adopt, adoptTwice, charterSquash) and of Ratified
+-- (ratify, ratifiedSquash) in slot order, then the value. A recursive
+-- field arrives folded at the target of its sort. adopted is sz0 at
+-- genesis and szS sz0 after an adoption, so the adoptTwice case is a
+-- constant path.
+def adopted : Charter -> Trunc0 Size :=
+  fun (c : Charter) => fold (Trunc0 Size) (Trunc0 Size)
+    (trunc0 Size sz0)
+    (fun (b : Trunc0 Size) (r : Trunc0 Size) => trunc0 Size (szS sz0))
+    (fun (b : Trunc0 Size) (w : Size) => fun (i : I) => trunc0 Size (szS sz0))
+    (fun (x : Trunc0 Size) (y : Trunc0 Size) (p : Path (Trunc0 Size) x y) (q : Path (Trunc0 Size) x y) => fun (i : I) => fun (j : I) => squash0 Size x y p q i j)
+    (fun (b : Trunc0 Size) (w : Size) => b)
+    (fun (a : Trunc0 Size) (x : Trunc0 Size) (y : Trunc0 Size) (p : Path (Trunc0 Size) x y) (q : Path (Trunc0 Size) x y) => fun (i : I) => fun (j : I) => squash0 Size x y p q i j) c
+def adoptedZero : Trunc0 Size := adopted charterZero
+def adoptedTwo : Trunc0 Size := adopted charterTwo
+def adoptedLaw : Trunc0 Size := adopted (adoptLaw @ i0)

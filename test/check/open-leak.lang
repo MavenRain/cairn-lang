@@ -1,0 +1,3 @@
+-- REFUSE_LAW (S6, rule O7): open is a law def, as decrypt; a def that uses it
+-- outside a Trunc1 argument needs a Path or Trunc1 codomain, not Size.
+def leakOpen : Quorum -> Enc Size -> Size := fun (q : Quorum) (c : Enc Size) => open Size q c

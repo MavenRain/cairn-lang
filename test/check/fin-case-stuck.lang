@@ -1,0 +1,6 @@
+-- A finAll case term stays stuck on a neutral k. p goes by finAll, and the
+-- core of each case holds the end value (refl at 0, refl at 1), not k. So
+-- (p k) @ i1 is the end k of the type, and the ordinary check of bad fails.
+-- Case 1 gives 1, not 0. If a neutral k picked case 0, bad would check.
+def p : (k : Fin 2) -> Path (Fin 2) (finAdd 2 k 0) k := fun (k : Fin 2) => refl
+def bad : (k : Fin 2) -> Path (Fin 2) ((p k) @ i1) 0 := fun (k : Fin 2) => refl

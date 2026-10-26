@@ -1,0 +1,93 @@
+-- Precompile views (slice S2, kickoff 1.5): ecAdd (address 6), ecMul (7), ecPairing (8), ecrecover (1), hash (SHA3), natDiv, natMod and addrToU256.
+-- test/precompile.sh deploys this contract and compares each view on the chain with a constant that a direct `evm run` to the precompile gave.
+-- The evaluator computes a closed ecAdd or ecMul (S8 B1, examples/bn254.lang): `langc eval examples/precompile.lang twoG` prints the 2 G words. A closed ecrecover computes (S7 b4). An open curve op or ecrecover and ecPairing stay stuck (R17). hash, natDiv, natMod and addrToU256 compute.
+state State := makeState (sigs : List U256)
+
+def init : State := makeState nil
+
+-- Entry: push one s word for recoverSum.
+def sign : (env : Env) -> (s : State) -> (x : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (x : U256) => some (pair (makeState (cons x (sigs s))) nil)
+
+-- ecAdd: the two coordinates of the sum of (ax, ay) and (bx, by).
+def addX : (env : Env) -> (s : State) -> (ax ay bx by : U256) -> U256 :=
+  fun (env : Env) (s : State) (ax ay bx by : U256) => first (ecAdd (pair ax ay) (pair bx by))
+
+def addY : (env : Env) -> (s : State) -> (ax ay bx by : U256) -> U256 :=
+  fun (env : Env) (s : State) (ax ay bx by : U256) => second (ecAdd (pair ax ay) (pair bx by))
+
+-- ecMul: the two coordinates of k times (ax, ay).
+def mulX : (env : Env) -> (s : State) -> (ax ay k : U256) -> U256 :=
+  fun (env : Env) (s : State) (ax ay k : U256) => first (ecMul (pair ax ay) k)
+
+def mulY : (env : Env) -> (s : State) -> (ax ay k : U256) -> U256 :=
+  fun (env : Env) (s : State) (ax ay k : U256) => second (ecMul (pair ax ay) k)
+
+-- (1, 1) is not on the curve: the precompile fails and the call reverts (R18). The y of the second point is an argument, so the curve op is open and the lowerer emits the call (S8 B1 folds a closed one to the host trap).
+def addBad : (env : Env) -> (s : State) -> (y : U256) -> U256 :=
+  fun (env : Env) (s : State) (y : U256) => first (ecAdd (pair 1u 1u) (pair 1u y))
+
+-- G2 of BN254 in the EIP-197 input order: (x_im, x_re), (y_im, y_re).
+def g2 : Prod (Prod U256 U256) (Prod U256 U256) :=
+  pair
+    (pair 0x198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2u
+          0x1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6edu)
+    (pair 0x090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975bu
+          0x12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daau)
+
+-- e(G1, G2) e(-G1, G2) = 1 with G1 = (1, 2) and -G1 = (1, p - 2).
+def pairOk : (env : Env) -> (s : State) -> Flag :=
+  fun (env : Env) (s : State) =>
+    ecPairing
+      (cons (pair (pair 1u 2u) g2)
+        (cons (pair (pair 1u 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd45u) g2) nil))
+
+-- The empty product is 1.
+def pairNil : (env : Env) -> (s : State) -> Flag :=
+  fun (env : Env) (s : State) => ecPairing nil
+
+-- ecrecover of a hash, v, r and s; an invalid signature gives the address 0 (R18).
+def recover : (env : Env) -> (s : State) -> (h : U256) -> (v : Nat) -> (r w : U256) -> Addr :=
+  fun (env : Env) (s : State) (h : U256) (v : Nat) (r w : U256) => ecrecover h v r w
+
+-- One ecrecover statement in a fold body runs once for each pushed s word (the end of the list first).
+-- The output block must be zero before each call (R18): a broken s after a valid s gives the address 0, not the old bytes.
+def recoverSum : (env : Env) -> (s : State) -> U256 :=
+  fun (env : Env) (s : State) =>
+    fold
+      (fun (x : U256) (acc : U256) =>
+        u256Add
+          (addrToU256
+            (ecrecover 0x38d18acb67d25c8bb9942764b62f18e17054f66a817bd4295423adf9ed98873eu 27
+              0x38d18acb67d25c8bb9942764b62f18e17054f66a817bd4295423adf9ed98873eu x))
+          acc)
+      0u (sigs s)
+
+-- signedBy (S7 b4): a is not 0 and ecrecover h v r w = a. An invalid signature gives the address 0 (R18), so the signer 0 must not match.
+def signedBy : (env : Env) -> (s : State) -> (h : U256) -> (v : Nat) -> (r w : U256) -> (a : Addr) -> Flag :=
+  fun (env : Env) (s : State) (h : U256) (v : Nat) (r w : U256) (a : Addr) =>
+    flagIf (addrEq a 0x0000000000000000000000000000000000000000) flagNo (addrEq (ecrecover h v r w) a)
+
+def hashv : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => hash a b
+
+-- leaf i: the parent index of leaf i plus its side bit (natDiv and natMod of one Nat).
+def leaf : (i : Nat) -> Nat := fun (i : Nat) => natAdd (natDiv i 2) (natMod i 2)
+
+def leafStep : (env : Env) -> (s : State) -> (i : Nat) -> Nat :=
+  fun (env : Env) (s : State) (i : Nat) => leaf i
+
+def addrWord : (env : Env) -> (s : State) -> (a : Addr) -> U256 :=
+  fun (env : Env) (s : State) (a : Addr) => addrToU256 a
+
+-- Closed terms for `langc eval`: hash computes (keccak256 of 64 zero bytes), the closed ecAdd computes (S8 B1), addrToU256 computes.
+def hashZero : U256 := hash 0u 0u
+
+def twoG : Prod U256 U256 := ecAdd (pair 1u 2u) (pair 1u 2u)
+
+def ownerWord : U256 := addrToU256 0x00000000000000000000000000000000000000aa
+
+-- A closed ecrecover computes in the host (S7 b4, front/secp256k1.c): the CallEcrecover0 address, and the address 0 for s = 0.
+def recoverGood : Addr := ecrecover 0x38d18acb67d25c8bb9942764b62f18e17054f66a817bd4295423adf9ed98873eu 27 0x38d18acb67d25c8bb9942764b62f18e17054f66a817bd4295423adf9ed98873eu 0x789d1dd423d25f0772d2748d60f7e4b81bb14d086eba8e8e8efb6dcff8a4ae02u
+
+def recoverBad : Addr := ecrecover 0x38d18acb67d25c8bb9942764b62f18e17054f66a817bd4295423adf9ed98873eu 27 0x38d18acb67d25c8bb9942764b62f18e17054f66a817bd4295423adf9ed98873eu 0u

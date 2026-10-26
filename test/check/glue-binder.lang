@@ -1,0 +1,4 @@
+-- The tube binder of Glue must be _, but here it is j. A branch of Glue
+-- cannot use the tube variable, so the binder must have no name.
+def bad : Path (Type 0) (Fin 3) (Fin 3) :=
+  fun (i : I) => Glue (Fin 3) (~i \/ i) (fun (j : I) => [ ~i -> pack (Fin 3) (idEquiv (Fin 3)), i -> pack (Fin 3) (idEquiv (Fin 3)) ])

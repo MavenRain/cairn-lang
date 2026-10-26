@@ -1,0 +1,2 @@
+-- elim on Trunc0 (S7 B1, O21) needs a case for trunc0 and a square case for squash0, so one case is refused.
+def bad : Trunc0 Unit -> Unit := fun (z : Trunc0 Unit) => elim (fun (t : Trunc0 Unit) => Unit) (fun (a : Unit) => a) z

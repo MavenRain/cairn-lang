@@ -1,0 +1,26 @@
+-- The circle S1 (S4a, rulings R1, R2, R3, R4): a path constructor, a fold
+-- with a path case, a formal hcomp at a HIT, and transport at a family with
+-- no parameters. The coin-lang defs code2, loopT, loopAt0, code3, loop2T
+-- and loop2At0 use Fin and ua, which S5 ports (coin-lang 44c917f, 91d7091):
+-- the loop is not refl, transport along code2 (loop i) moves 0 to 1.
+def loopPath : Path S1 base base := fun (i : I) => loop i
+-- A family with no parameters transports a value to itself.
+def transpBase : Path S1 (transp (fun (_ : I) => S1) i0 base) base := refl
+-- The fold sends the base to 0 and the loop to the constant path at 0.
+def toNat : S1 -> Nat := fun (x : S1) => fold 0 (fun (i : I) => 0) x
+-- The composite of loop with loop is a formal hcomp (a canonical value).
+def loop2 : Path S1 base base :=
+  fun (j : I) => hcomp S1 (~j \/ j) (fun (i : I) => [ ~j -> base, j -> loop i ]) (loop j)
+-- The fold sends the base to Fin 2 and the loop to the ua of r + 1.
+def code2 : S1 -> Type 0 := fun (x : S1) => fold (Fin 2)
+  (ua (Fin 2) (Fin 2) (isoToEquiv (Fin 2) (Fin 2) (fun (r : Fin 2) => finAdd 2 r 1)
+    (fun (r : Fin 2) => finAdd 2 r 1) (fun (k : Fin 2) => refl) (fun (k : Fin 2) => refl))) x
+def loopT : Path (Fin 2) (transp (fun (i : I) => code2 (loop i)) i0 0) 1 := refl
+def loopAt0 : Fin 2 := transp (fun (i : I) => code2 (loop i)) i0 0
+-- The fold sends the base to Fin 3 and the loop to the ua of r + 1.
+def code3 : S1 -> Type 0 := fun (x : S1) => fold (Fin 3)
+  (ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 r 1)
+    (fun (r : Fin 3) => finAdd 3 r 2) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))) x
+-- The fold of loop2 is the composite of two ua paths, so transport moves 0 to 2.
+def loop2T : Path (Fin 3) (transp (fun (j : I) => code3 (loop2 @ j)) i0 0) 2 := refl
+def loop2At0 : Fin 3 := transp (fun (j : I) => code3 (loop2 @ j)) i0 0

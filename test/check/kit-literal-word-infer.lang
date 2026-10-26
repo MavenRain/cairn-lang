@@ -1,0 +1,1 @@
+def x : Unit := first (pair unit 5u)

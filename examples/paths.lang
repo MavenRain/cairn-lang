@@ -1,0 +1,24 @@
+-- Paths over the interval: refl, sym, cong, funExt, the neutral end point
+-- rule, path eta, ~~i = i and the De Morgan laws (rulings R4, R7, R11).
+def price : Nat := 1200
+def same : Path Nat price price := refl
+def back : Path Nat price price := sym same
+def bumped : Path Nat (natAdd price 1) (natAdd price 1) := cong (fun (n : Nat) => natAdd n 1) same
+def plusOne : Nat -> Nat := fun (n : Nat) => natAdd n 1
+def plusOneAt : (n : Nat) -> Path Nat (plusOne n) (natAdd n 1) := fun (n : Nat) => refl
+def pointwise : Path (Nat -> Nat) plusOne (fun (m : Nat) => natAdd m 1) := funExt plusOneAt
+-- Not refl: the ends hold only by the neutral end point rule (JSON rule 6).
+def ev : Path ((p : Path Nat 0 0) -> Nat) (fun (p : Path Nat 0 0) => 0) (fun (p : Path Nat 0 0) => 0) :=
+  fun (i : I) => fun (p : Path Nat 0 0) => p @ i
+-- sym of a path that is not refl: the printed term names its interval variable.
+def evBack : Path ((p : Path Nat 0 0) -> Nat) (fun (p : Path Nat 0 0) => 0) (fun (p : Path Nat 0 0) => 0) := sym ev
+def symSym : (p : Path Nat 0 0) -> Path (Path Nat 0 0) (sym (sym p)) p := fun (p : Path Nat 0 0) => refl
+def congId : (p : Path Nat 0 0) -> Path (Path Nat 0 0) (cong (fun (n : Nat) => n) p) p := fun (p : Path Nat 0 0) => refl
+def deMorganMeet : (p : Path Nat 0 0) ->
+  Path (PathP (fun (j : I) => Path Nat 0 (p @ ~j)) (fun (i : I) => 0) (sym p))
+    (fun (j : I) => fun (i : I) => p @ ~(i /\ j)) (fun (j : I) => fun (i : I) => p @ (~i \/ ~j)) :=
+  fun (p : Path Nat 0 0) => refl
+def deMorganJoin : (p : Path Nat 0 0) ->
+  Path (PathP (fun (j : I) => Path Nat (p @ ~j) 0) (sym p) (fun (i : I) => 0))
+    (fun (j : I) => fun (i : I) => p @ ~(i \/ j)) (fun (j : I) => fun (i : I) => p @ (~i /\ ~j)) :=
+  fun (p : Path Nat 0 0) => refl

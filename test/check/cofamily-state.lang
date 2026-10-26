@@ -1,0 +1,3 @@
+-- REFUSE_STATE: a state field of a stream type is a function from the
+-- positions, so it is not first order.
+state State := makeState (held : U256) (feed : Stream U256)

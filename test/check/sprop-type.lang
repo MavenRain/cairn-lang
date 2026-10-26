@@ -1,0 +1,2 @@
+-- No strict propositions (orbit-lang S1 ruling): SProp is not a type.
+def f : SProp -> Type 0 := fun (p : SProp) => Nat

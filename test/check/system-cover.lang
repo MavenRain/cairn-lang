@@ -1,0 +1,1 @@
+def bad : Path Nat 3 3 := fun (j : I) => hcomp Nat (~j \/ j) (fun (i : I) => [ ~j -> 3 ]) 3

@@ -1,0 +1,2 @@
+-- No irrelevant or implicit binder marker: the parser has no braces.
+def f : {x : Nat} -> Nat := fun (x : Nat) => x

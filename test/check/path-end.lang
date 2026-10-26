@@ -1,0 +1,1 @@
+def bad : Path Nat 0 1 := fun (i : I) => 0

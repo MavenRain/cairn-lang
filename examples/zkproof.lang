@@ -1,0 +1,22 @@
+-- ZKProof and verified (S7, Q-S7-1 .. Q-S7-3 (a), rule O7). ZKProof W is
+-- Trunc1 W, so a decrypt under ZKProof does not make a def law-only: Opens
+-- and OneHot have the codomain Type 0. Opens says c opens to m (the proof
+-- of randomness). OneHot says the ballot b opens to the indicator of one
+-- hidden choice (Size for U256: words are kit). lawZK says two proofs of W
+-- are equal (zero knowledge is the squash1 cell). lawVerified says that
+-- verified of an ideal transcript is the truncated witness. lawOpens makes
+-- Opens from a transcript. The real proofs are host data (src/front/sigma.c).
+def Opens : (A : Type 0) -> Enc A -> A -> Type 0 :=
+  fun (A : Type 0) (c : Enc A) (m : A) => ZKProof (Path A (decrypt A c) m)
+def OneHot : (C : Type 0) -> (C -> C -> Size) -> Enc (C -> Size) -> Type 0 :=
+  fun (C : Type 0) (ind : C -> C -> Size) (b : Enc (C -> Size)) =>
+  ZKProof ((i : C) * Path (C -> Size) (decrypt (C -> Size) b) (ind i))
+def lawZK : (W : Type 0) -> (p : ZKProof W) -> (q : ZKProof W) -> Path (ZKProof W) p q :=
+  fun (W : Type 0) (p : ZKProof W) (q : ZKProof W) => fun (i : I) => squash1 W p q i
+def lawVerified : (W : Type 0) -> (w : W) -> Path (ZKProof W) (verified W (transcript W w)) (trunc1 W w) :=
+  fun (W : Type 0) (w : W) => refl
+def lawOpens : (A : Type 0) -> (c : Enc A) -> (m : A) -> Transcript (Path A (decrypt A c) m) -> Opens A c m :=
+  fun (A : Type 0) (c : Enc A) (m : A) (t : Transcript (Path A (decrypt A c) m)) => verified (Path A (decrypt A c) m) t
+def provedOne : ZKProof Size := verified Size (transcript Size (szS sz0))
+def provedRefl : Path (ZKProof Size) (verified Size (transcript Size (szS sz0))) (trunc1 Size (szS sz0)) :=
+  lawVerified Size (szS sz0)

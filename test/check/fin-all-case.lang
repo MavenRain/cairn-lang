@@ -1,0 +1,2 @@
+-- finAll checks each case: finAdd 3 k 0 is 0 at k = 0, but not at k = 1.
+def bad : (k : Fin 3) -> Path (Fin 3) (finAdd 3 k 0) 0 := fun (k : Fin 3) => refl

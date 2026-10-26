@@ -1,0 +1,63 @@
+-- Former CC (S4, O28): the cofree comonad of a cocell signature. The
+-- domain cofamily Stream gives extract (sHead), extend (sExtend) and
+-- duplicate (sDuplicate). The counit law holds by conversion. The other
+-- extend laws hold by the bisimulation principle StreamBisim, and the
+-- duplicate laws follow from the extend laws.
+def lawCounit : (A : Type 0) -> (B : Type 0) -> (f : Stream A -> B) -> (x : Stream A) -> Path B (sHead B (sExtend A B f x)) (f x) :=
+  fun (A : Type 0) (B : Type 0) (f : Stream A -> B) (x : Stream A) => refl
+-- Extend of extract is the identity. The relation is x = sExtend A A
+-- (sHead A) y, and sHead and sTail keep it by conversion.
+def lawExtendEps : (A : Type 0) -> (v : Stream A) -> Path (Stream A) (sExtend A A (sHead A) v) v :=
+  fun (A : Type 0) (v : Stream A) =>
+    StreamBisim A (fun (x : Stream A) (y : Stream A) => Path (Stream A) x (sExtend A A (sHead A) y))
+      (fun (x : Stream A) (y : Stream A) (w : Path (Stream A) x (sExtend A A (sHead A) y)) => fun (i : I) => sHead A (w @ i))
+      (fun (x : Stream A) (y : Stream A) (w : Path (Stream A) x (sExtend A A (sHead A) y)) => fun (i : I) => sTail A (w @ i))
+      (sExtend A A (sHead A) v) v refl
+-- The associativity relation: u and v are the two sides of the law at one
+-- seed s.
+def assocRel : (A : Type 0) -> (B : Type 0) -> (C : Type 0) -> (Stream B -> C) -> (Stream A -> B) -> Stream C -> Stream C -> Type 0 :=
+  fun (A : Type 0) (B : Type 0) (C : Type 0) (f : Stream B -> C) (g : Stream A -> B) (u : Stream C) (v : Stream C) =>
+    Sigma (s : Stream A) (Sigma (pu : Path (Stream C) u (sExtend B C f (sExtend A B g s)))
+      (Path (Stream C) v (sExtend A C (fun (y : Stream A) => f (sExtend A B g y)) s)))
+-- Extend is associative. The heads of the two sides are f (sExtend A B g s)
+-- by conversion, and the tail of the relation is the relation at the seed
+-- sTail A s.
+def lawAssoc : (A : Type 0) -> (B : Type 0) -> (C : Type 0) -> (f : Stream B -> C) -> (g : Stream A -> B) -> (z : Stream A) ->
+    Path (Stream C) (sExtend B C f (sExtend A B g z)) (sExtend A C (fun (y : Stream A) => f (sExtend A B g y)) z) :=
+  fun (A : Type 0) (B : Type 0) (C : Type 0) (f : Stream B -> C) (g : Stream A -> B) (z : Stream A) =>
+    StreamBisim C (assocRel A B C f g)
+      (fun (u : Stream C) (v : Stream C) (w : assocRel A B C f g u v) =>
+        trans C (sHead C u) (f (sExtend A B g (witness w))) (sHead C v)
+          (fun (i : I) => sHead C (witness (payload w) @ i)) (fun (i : I) => sHead C (payload (payload w) @ (~i))))
+      (fun (u : Stream C) (v : Stream C) (w : assocRel A B C f g u v) =>
+        pack (sTail A (witness w)) (pack (fun (i : I) => sTail C (witness (payload w) @ i)) (fun (i : I) => sTail C (payload (payload w) @ i))))
+      (sExtend B C f (sExtend A B g z)) (sExtend A C (fun (y : Stream A) => f (sExtend A B g y)) z) (pack z (pack refl refl))
+-- Duplicate laws: extract after duplicate (by conversion), map of extract
+-- after duplicate (lawAssoc, then lawExtendEps), and duplicate twice
+-- (lawAssoc on each side).
+def lawDupCounit : (A : Type 0) -> (x : Stream A) -> Path (Stream A) (sHead (Stream A) (sDuplicate A x)) x :=
+  fun (A : Type 0) (x : Stream A) => refl
+def lawDupMap : (A : Type 0) -> (x : Stream A) ->
+    Path (Stream A) (sExtend (Stream A) A (fun (w : Stream (Stream A)) => sHead A (sHead (Stream A) w)) (sDuplicate A x)) x :=
+  fun (A : Type 0) (x : Stream A) =>
+    trans (Stream A) (sExtend (Stream A) A (fun (w : Stream (Stream A)) => sHead A (sHead (Stream A) w)) (sDuplicate A x))
+      (sExtend A A (sHead A) x) x
+      (lawAssoc A (Stream A) A (fun (w : Stream (Stream A)) => sHead A (sHead (Stream A) w)) (fun (y : Stream A) => y) x)
+      (lawExtendEps A x)
+def lawDupDup : (A : Type 0) -> (x : Stream A) ->
+    Path (Stream (Stream (Stream A))) (sDuplicate (Stream A) (sDuplicate A x))
+      (sExtend (Stream A) (Stream (Stream A)) (fun (w : Stream (Stream A)) => sDuplicate A (sHead (Stream A) w)) (sDuplicate A x)) :=
+  fun (A : Type 0) (x : Stream A) =>
+    trans (Stream (Stream (Stream A))) (sDuplicate (Stream A) (sDuplicate A x)) (sExtend A (Stream (Stream A)) (sDuplicate A) x)
+      (sExtend (Stream A) (Stream (Stream A)) (fun (w : Stream (Stream A)) => sDuplicate A (sHead (Stream A) w)) (sDuplicate A x))
+      (lawAssoc A (Stream A) (Stream (Stream A)) (fun (w : Stream (Stream A)) => w) (fun (y : Stream A) => y) x)
+      (fun (i : I) => lawAssoc A (Stream A) (Stream (Stream A)) (fun (w : Stream (Stream A)) => sDuplicate A (sHead (Stream A) w)) (fun (y : Stream A) => y) x @ (~i))
+-- Eval rows (test/eval/expect.txt): nats is the stream sz0, szS sz0, ...,
+-- and evens is its parity by sExtend.
+def nats : Stream Size := sCorec Size Size (fun (s : Size) => s) (fun (s : Size) => szS s) sz0
+def natsHead : Size := sHead Size nats
+def natsAt3 : Size := sHead Size (sTail Size (sTail Size (sTail Size nats)))
+def evens : Stream Size := sExtend Size Size (fun (w : Stream Size) => sizeEven (sHead Size w)) nats
+def evensAt1 : Size := sHead Size (sTail Size evens)
+def evensAt2 : Size := sHead Size (sTail Size (sTail Size evens))
+def dupAt1 : Size := sHead Size (sHead (Stream Size) (sTail (Stream Size) (sDuplicate Size nats)))

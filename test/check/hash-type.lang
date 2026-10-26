@@ -1,0 +1,2 @@
+-- TYPE_MISMATCH (slice S2, R16): hash takes two U256 words, not Nat.
+def wrong : U256 := hash 1 2

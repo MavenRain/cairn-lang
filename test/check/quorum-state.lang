@@ -1,0 +1,4 @@
+-- REFUSE_STATE (S6, Q-S6-1 (a)): Quorum is guest data with no chain form in
+-- S6 (the chain takes t and the shares as words), so a state field of type
+-- Quorum is refused.
+state State := makeState (held : U256) (board : Quorum)

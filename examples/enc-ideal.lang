@@ -1,0 +1,16 @@
+-- The ideal model of Enc in kit mode (S5, rule O7). The kit is the trusted
+-- test scope, so it may evaluate decrypt, observe, open (S6) and the
+-- projection encOf.
+-- An Enc value is an encEta term: decrypt is its fold, observe is decrypt
+-- under trunc1, open is decrypt for every quorum: openQ (2 of 3) and openP
+-- (3 of 3) open one tally to one value.
+def sizeAdd : Size -> Size -> Size :=
+  fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
+def encOne : Enc Size := encEta Size (szS sz0)
+def encSum : Enc Size := encOp2 Size Size Size sizeAdd encOne encOne
+def openSum : Size := decrypt Size encSum
+def openOne : Size := encOf encOne
+def seenSum : Trunc1 Size := observe Size encSum
+def encThree : Enc Size := encOp2 Size Size Size sizeAdd encOne encSum
+def openQ : Size := open Size (quorum (szS (szS sz0)) (szS (szS (szS sz0)))) encThree
+def openP : Size := open Size (quorum (szS (szS (szS sz0))) (szS (szS (szS sz0)))) encThree

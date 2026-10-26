@@ -1,0 +1,2 @@
+-- No Prop-like types (R11): a motive into Prop is refused, because the kernel has no sort Prop.
+def bad : Unit -> Type 0 := fun (u : Unit) => elim (fun (v : Unit) => Prop) Unit u

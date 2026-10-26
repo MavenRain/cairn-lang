@@ -1,0 +1,3 @@
+-- No irrelevance attribute: the parser has no attribute syntax.
+#[irrelevant]
+def f : (x : Nat) -> Nat := fun (x : Nat) => x

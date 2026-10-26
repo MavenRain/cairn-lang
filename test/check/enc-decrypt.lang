@@ -1,0 +1,3 @@
+-- REFUSE_LAW (rule O7): decrypt is a law def; a def that uses it outside a
+-- Trunc1 argument needs a Path or Trunc1 codomain, not Size.
+def peek : Enc Size -> Size := fun (c : Enc Size) => decrypt Size c

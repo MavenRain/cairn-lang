@@ -1,0 +1,13 @@
+-- The free monoid of domain/domain.lang (S3, USER ruling Q-S3-5 (a), rule
+-- R1): a guest program uses FreeMon in place of the cons list List, which
+-- is kit only (a guest List gives REFUSE_CELL).
+def freeOne : Size := szS sz0
+def freePair : FreeMon Size := fmCons Size sz0 (fmCons Size freeOne (fmUnit Size))
+-- fmMap computes on points by the fold.
+def freeMapAt : Path (FreeMon Size) (fmMap Size Size (fun (s : Size) => szS s) freePair) (fmCons Size freeOne (fmCons Size (szS freeOne) (fmUnit Size))) := refl
+-- The bind of the generator is the identity on points (a monad law).
+def freeBindEta : Path (FreeMon Size) (fmBind Size Size (fun (s : Size) => fmEta Size s) freePair) freePair := refl
+-- The monoid laws are path constructors of the family.
+def freeUnitL : Path (FreeMon Size) (fmMul Size (fmUnit Size) freePair) freePair := fun (i : I) => fmUnitL Size freePair i
+def freeAssoc : (x : FreeMon Size) -> (y : FreeMon Size) -> (z : FreeMon Size) -> Path (FreeMon Size) (fmMul Size (fmMul Size x y) z) (fmMul Size x (fmMul Size y z)) :=
+  fun (x : FreeMon Size) (y : FreeMon Size) (z : FreeMon Size) => fun (i : I) => fmAssoc Size x y z i

@@ -3,11 +3,13 @@
 #define LANG_FRONT_LEXER_H
 
 #include "front/base.h"
+#include "front/u256.h"
 
 typedef enum {
   TOK_EOF,
   TOK_IDENT,
   TOK_NAT,
+  TOK_WORD, /* a U256 or Addr literal; nat is WORD_U256 or WORD_ADDR */
   TOK_LPAREN,
   TOK_RPAREN,
   TOK_COLON,
@@ -16,13 +18,26 @@ typedef enum {
   TOK_FATARROW, /* => */
   TOK_STAR,
   TOK_BAR,
+  TOK_AT,       /* @ */
+  TOK_TILDE,    /* ~ */
+  TOK_MEET,     /* /\ */
+  TOK_JOIN,     /* \/ */
+  TOK_LBRACKET, /* [ */
+  TOK_RBRACKET, /* ] */
+  TOK_COMMA,
   TOK_KW_DEF,
   TOK_KW_REC,
   TOK_KW_FUN,
   TOK_KW_FAMILY,
   TOK_KW_AXIOM,
   TOK_KW_TYPE,
-  TOK_KW_SIGMA
+  TOK_KW_SIGMA,
+  TOK_KW_STATE,
+  TOK_KW_EVENT,
+  TOK_KW_AND,
+  TOK_KW_COFAMILY,
+  TOK_KW_SEALED, /* domain-only modifier of a family (S5) */
+  TOK_KW_LAW     /* domain-only modifier of a def (S5) */
 } TokKind;
 
 typedef struct {
@@ -30,6 +45,7 @@ typedef struct {
   const char *text;
   size_t len;
   uint64_t nat;
+  U256 word; /* WORD: the limbs */
   int line;
   int col;
 } Token;
@@ -42,6 +58,9 @@ typedef struct {
 
 /* SOURCE names the input in diagnostics. Returns 1, or 0 after a diagnostic. */
 int lex_source(Arena *arena, const char *source, const char *text, size_t len, TokenList *out, Diag *diag);
+/* As lex_source, and `.` is also a name character (S4): the text of the
+   declarations that the checker generates for a cofamily. */
+int lex_internal(Arena *arena, const char *source, const char *text, size_t len, TokenList *out, Diag *diag);
 const char *tok_kind_name(TokKind kind);
 
 #endif

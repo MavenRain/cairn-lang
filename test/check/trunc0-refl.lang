@@ -1,0 +1,3 @@
+-- No definitional proof irrelevance at Trunc0: two different elements
+-- are not convertible, so refl does not relate them.
+def bad : Path (Trunc0 Nat) (trunc0 Nat 0) (trunc0 Nat 1) := refl

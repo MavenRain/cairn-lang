@@ -1,0 +1,20 @@
+-- The Fin core and the equivalence library (S3a, rulings R3, R8): Fin
+-- literals, finAdd and finNeg mod n, transp at Fin, finAll proofs, idEquiv
+-- and isoToEquiv on Fin 11.
+def finWrap : Path (Fin 11) (finAdd 11 9 3) 1 := refl
+def finNegOne : Path (Fin 3) (finNeg 3 1) 2 := refl
+def finTransp : Path (Fin 3) (transp (fun (_ : I) => Fin 3) i0 2) 2 := refl
+def finTrans : Path (Fin 3) 1 1 := trans (Fin 3) 1 1 1 refl refl
+def idEquivFin3 : Path (Fin 3) (witness (idEquiv (Fin 3)) 2) 2 := refl
+def plus3 : (r : Fin 11) -> Fin 11 := fun (r : Fin 11) => finAdd 11 r 3
+def minus3 : (r : Fin 11) -> Fin 11 := fun (r : Fin 11) => finAdd 11 r 8
+-- The section and the retraction hold by finAll (one refl for each case).
+-- The equivalence is inline: a top-level Equiv is a pair with a function,
+-- and JSON refuses it.
+def plus3At9 : Path (Fin 11) (witness (isoToEquiv (Fin 11) (Fin 11) plus3 minus3
+  (fun (k : Fin 11) => refl) (fun (k : Fin 11) => refl)) 9) 1 := refl
+-- Values for langc eval. A Fin parameter is not an entry (entries are
+-- first-order Nat and Flag definitions), so rot2 applies rot.
+def addMod : Fin 11 := finAdd 11 9 3
+def rot : (r : Fin 3) -> Fin 3 := fun (r : Fin 3) => finAdd 3 r 1
+def rot2 : Fin 3 := rot 2

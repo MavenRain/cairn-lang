@@ -1,0 +1,31 @@
+-- The propositional truncation Trunc1 (S4b, rulings R5 and R7): a path
+-- constructor between any two points and a fold into another truncation.
+-- The points of sq1 and map1 are Nat values. The coin-lang defs rot3,
+-- truncUa, truncAt, truncSq and truncHcomp transport along a ua path at
+-- Fin 3 (S5: Fin and ua came with coin-lang 44c917f and 91d7091).
+def sq1 : Path (Trunc1 Nat) (trunc1 Nat 0) (trunc1 Nat 1) :=
+  fun (i : I) => squash1 Nat (trunc1 Nat 0) (trunc1 Nat 1) i
+-- The fold sends trunc1 a to trunc1 (f a) and squash1 to squash1.
+def map1 : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> Trunc1 A -> Trunc1 B :=
+  fun (A : Type 0) => fun (B : Type 0) => fun (f : A -> B) => fun (t : Trunc1 A) =>
+    fold (fun (a : A) => trunc1 B (f a)) (fun (x : Trunc1 B) (y : Trunc1 B) => fun (i : I) => squash1 B x y i) t
+def map1At : Path (Trunc1 Nat) (map1 Nat Nat (fun (r : Nat) => natMod (natAdd r 1) 3) (trunc1 Nat 2)) (trunc1 Nat 0) := refl
+def truncMapped : Trunc1 Nat := map1 Nat Nat (fun (r : Nat) => natMod (natAdd r 1) 3) (trunc1 Nat 2)
+-- The ua path of r + 1 at Fin 3.
+def rot3 : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 r 1)
+    (fun (r : Fin 3) => finAdd 3 r 2) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+-- Transport along Trunc1 (rot3 @ i) moves the field of trunc1.
+def truncUa : Path (Trunc1 (Fin 3)) (transp (fun (i : I) => Trunc1 (rot3 @ i)) i0 (trunc1 (Fin 3) 0)) (trunc1 (Fin 3) 1) := refl
+def truncAt : Trunc1 (Fin 3) := transp (fun (i : I) => Trunc1 (rot3 @ i)) i0 (trunc1 (Fin 3) 0)
+-- The recursive fields of squash1 move too: the ends alone do not show it.
+def truncSq : Path (Path (Trunc1 (Fin 3)) (trunc1 (Fin 3) 1) (trunc1 (Fin 3) 2))
+  (fun (j : I) => transp (fun (i : I) => Trunc1 (rot3 @ i)) i0 (squash1 (Fin 3) (trunc1 (Fin 3) 0) (trunc1 (Fin 3) 1) j))
+  (fun (j : I) => squash1 (Fin 3) (trunc1 (Fin 3) 1) (trunc1 (Fin 3) 2) j) := refl
+-- Transport of a formal hcomp moves the tubes and the base.
+def truncHcomp : Path (Path (Trunc1 (Fin 3)) (trunc1 (Fin 3) 1) (trunc1 (Fin 3) 0))
+  (fun (j : I) => transp (fun (i : I) => Trunc1 (rot3 @ i)) i0
+    (hcomp (Trunc1 (Fin 3)) (~j \/ j) (fun (i : I) => [ ~j -> trunc1 (Fin 3) 0, j -> squash1 (Fin 3) (trunc1 (Fin 3) 1) (trunc1 (Fin 3) 2) i ])
+      (squash1 (Fin 3) (trunc1 (Fin 3) 0) (trunc1 (Fin 3) 1) j)))
+  (fun (j : I) => hcomp (Trunc1 (Fin 3)) (~j \/ j) (fun (i : I) => [ ~j -> trunc1 (Fin 3) 1, j -> squash1 (Fin 3) (trunc1 (Fin 3) 2) (trunc1 (Fin 3) 0) i ])
+      (squash1 (Fin 3) (trunc1 (Fin 3) 1) (trunc1 (Fin 3) 2) j)) := refl

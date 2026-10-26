@@ -1,0 +1,2 @@
+-- elim is only for a domain family outside a block (S7 B1). Charter is a sort of an inductive inductive block, so elim on Charter is refused.
+def bad : Charter -> Size := fun (c : Charter) => elim (fun (d : Charter) => Size) sz0 c

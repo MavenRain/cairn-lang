@@ -1,0 +1,2 @@
+def bad : Path (Path Nat 0 0) (fun (k : I) => 0) (fun (k : I) => 0) :=
+  fun (j : I) => fun (k : I) => hcomp Nat (j \/ k) (fun (i : I) => [ j -> 0, k -> 1 ]) 0

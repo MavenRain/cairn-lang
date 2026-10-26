@@ -1,0 +1,2 @@
+-- No Prop-like types (R11), also for elim on a domain family (S7 B1): the kernel has no sort Prop, so the name Prop is unknown.
+def bad : Size -> Type 0 := fun (s : Size) => elim (fun (t : Size) => Prop) Size (fun (k : Size) (ih : Type 0) => Size) s

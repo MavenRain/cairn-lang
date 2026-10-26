@@ -1,0 +1,113 @@
+-- The Orbit quotient (slice S4, PLAN section 8), guest mode: the design signature slots and act of signature.lang.
+-- The kernel gives the family Orbit (orbitProj, orbitEq, orbitSquash) directly after act; its orbitEq field has the type R a b below, unfolded.
+def Member : Type 0 := Sum Unit Unit
+def Choice : Type 0 := Sum Unit Unit
+def Outcome : Type 0 := Choice
+def Group : Type 0 := Sum Unit Unit
+
+def flip : Choice -> Choice := fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+
+def act : Group -> (Member -> Choice) -> Member -> Choice :=
+  fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => flip (f m)) g
+
+-- R c d: some g of the group sends d to c.
+def R : (Member -> Choice) -> (Member -> Choice) -> Type 0 :=
+  fun (c : Member -> Choice) (d : Member -> Choice) => Sigma (g : Group) (Path (Member -> Choice) (act g d) c)
+
+-- Sets from loops: when each loop is refl, J on q gives isSet A.
+def setFromLoops : (A : Type 0) -> ((x : A) -> (p : Path A x x) -> Path (Path A x x) p refl) -> isSet A :=
+  fun (A : Type 0) (L : (x : A) -> (p : Path A x x) -> Path (Path A x x) p refl) (x : A) (y : A) (p : Path A x y) (q : Path A x y) =>
+    J A x (fun (z : A) (r : Path A x z) => (s : Path A x z) -> Path (Path A x z) s r) (L x) y q p
+
+-- Unit is a set. normU replaces a path from unit by the path that elim gives, and J shows that the two are equal.
+def normU : (c : Unit) -> Path Unit unit c -> Path Unit unit c :=
+  fun (c : Unit) (p : Path Unit unit c) => elim (fun (d : Unit) => Path Unit unit d) refl c
+def retrU : (c : Unit) -> (p : Path Unit unit c) -> Path (Path Unit unit c) p (normU c p) :=
+  fun (c : Unit) (p : Path Unit unit c) => J Unit unit (fun (d : Unit) (r : Path Unit unit d) => Path (Path Unit unit d) r (normU d r)) refl c p
+def loopsU : (x : Unit) -> (p : Path Unit x x) -> Path (Path Unit x x) p refl :=
+  fun (x : Unit) => elim (fun (y : Unit) => (p : Path Unit y y) -> Path (Path Unit y y) p refl) (fun (p : Path Unit unit unit) => retrU unit p) x
+def isSetUnit : isSet Unit := setFromLoops Unit loopsU
+
+-- Sum A B is a set when A and B are sets. normL sends a path from inl a to inl x through its A part (either with
+-- the default a) and keeps a path to inr b. On a loop at inl a, the A part is a loop in A, and isSet A makes it refl.
+def normL : (A : Type 0) -> (B : Type 0) -> (a : A) -> (c : Sum A B) -> Path (Sum A B) (inl a) c -> Path (Sum A B) (inl a) c :=
+  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inl a) d -> Path (Sum A B) (inl a) d)
+    (fun (x : A) (p : Path (Sum A B) (inl a) (inl x)) => fun (i : I) => inl (either (fun (y : A) => y) (fun (b : B) => a) (p @ i)))
+    (fun (b : B) (p : Path (Sum A B) (inl a) (inr b)) => p) c
+def retrL : (A : Type 0) -> (B : Type 0) -> (a : A) -> (c : Sum A B) -> (p : Path (Sum A B) (inl a) c) -> Path (Path (Sum A B) (inl a) c) p (normL A B a c p) :=
+  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) (p : Path (Sum A B) (inl a) c) =>
+    J (Sum A B) (inl a) (fun (d : Sum A B) (r : Path (Sum A B) (inl a) d) => Path (Path (Sum A B) (inl a) d) r (normL A B a d r)) refl c p
+def loopL : (A : Type 0) -> (B : Type 0) -> isSet A -> (a : A) -> (q : Path (Sum A B) (inl a) (inl a)) -> Path (Path (Sum A B) (inl a) (inl a)) q refl :=
+  fun (A : Type 0) (B : Type 0) (sA : isSet A) (a : A) (q : Path (Sum A B) (inl a) (inl a)) =>
+    trans (Path (Sum A B) (inl a) (inl a)) q (normL A B a (inl a) q) refl (retrL A B a (inl a) q)
+      (fun (j : I) => fun (i : I) => inl ((sA a a (fun (k : I) => either (fun (y : A) => y) (fun (b : B) => a) (q @ k)) refl @ j) @ i))
+def normR : (A : Type 0) -> (B : Type 0) -> (b : B) -> (c : Sum A B) -> Path (Sum A B) (inr b) c -> Path (Sum A B) (inr b) c :=
+  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inr b) d -> Path (Sum A B) (inr b) d)
+    (fun (a : A) (p : Path (Sum A B) (inr b) (inl a)) => p)
+    (fun (x : B) (p : Path (Sum A B) (inr b) (inr x)) => fun (i : I) => inr (either (fun (a : A) => b) (fun (y : B) => y) (p @ i))) c
+def retrR : (A : Type 0) -> (B : Type 0) -> (b : B) -> (c : Sum A B) -> (p : Path (Sum A B) (inr b) c) -> Path (Path (Sum A B) (inr b) c) p (normR A B b c p) :=
+  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) (p : Path (Sum A B) (inr b) c) =>
+    J (Sum A B) (inr b) (fun (d : Sum A B) (r : Path (Sum A B) (inr b) d) => Path (Path (Sum A B) (inr b) d) r (normR A B b d r)) refl c p
+def loopR : (A : Type 0) -> (B : Type 0) -> isSet B -> (b : B) -> (q : Path (Sum A B) (inr b) (inr b)) -> Path (Path (Sum A B) (inr b) (inr b)) q refl :=
+  fun (A : Type 0) (B : Type 0) (sB : isSet B) (b : B) (q : Path (Sum A B) (inr b) (inr b)) =>
+    trans (Path (Sum A B) (inr b) (inr b)) q (normR A B b (inr b) q) refl (retrR A B b (inr b) q)
+      (fun (j : I) => fun (i : I) => inr ((sB b b (fun (k : I) => either (fun (a : A) => b) (fun (y : B) => y) (q @ k)) refl @ j) @ i))
+def loopsSum : (A : Type 0) -> (B : Type 0) -> isSet A -> isSet B -> (x : Sum A B) -> (p : Path (Sum A B) x x) -> Path (Path (Sum A B) x x) p refl :=
+  fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) (x : Sum A B) =>
+    elim (fun (y : Sum A B) => (p : Path (Sum A B) y y) -> Path (Path (Sum A B) y y) p refl) (loopL A B sA) (loopR A B sB) x
+def isSetSum : (A : Type 0) -> (B : Type 0) -> isSet A -> isSet B -> isSet (Sum A B) :=
+  fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) => setFromLoops (Sum A B) (loopsSum A B sA sB)
+def isSetChoice : isSet Choice := isSetSum Unit Unit isSetUnit isSetUnit
+
+-- Disjointness: either into Type 0 sends inl to Unit and inr to X, so a path from inl unit to inr unit gives a term of each type X.
+def disjoint : (X : Type 0) -> Path Choice (inl unit) (inr unit) -> X :=
+  fun (X : Type 0) (p : Path Choice (inl unit) (inr unit)) =>
+    subst Choice (fun (c : Choice) => either (fun (u : Unit) => Unit) (fun (u : Unit) => X) c) (inl unit) (inr unit) p unit
+
+def allA : Member -> Choice := fun (m : Member) => inl unit
+def allB : Member -> Choice := fun (m : Member) => inr unit
+def split : Member -> Choice := fun (m : Member) => m
+
+-- The glue path: act (inr unit) sends allA to allB, so orbitEq gives a path in Orbit.
+def flipSame : Path Orbit (orbitProj allB) (orbitProj allA) :=
+  fun (i : I) => orbitEq (act (inr unit) allA) allA (pack (inr unit) refl) i
+
+-- same x y is inl unit when x and y are equal and inr unit when not. No eta for Unit, so flipFlip needs elim on the payload too.
+def same : Choice -> Choice -> Choice :=
+  fun (x : Choice) (y : Choice) => either (fun (u : Unit) => y) (fun (u : Unit) => flip y) x
+def flipFlip : (y : Choice) -> Path Choice (flip (flip y)) y :=
+  fun (y : Choice) => elim (fun (z : Choice) => Path Choice (flip (flip z)) z)
+    (fun (v : Unit) => elim (fun (w : Unit) => Path Choice (flip (flip (inl w))) (inl w)) refl v)
+    (fun (v : Unit) => elim (fun (w : Unit) => Path Choice (flip (flip (inr w))) (inr w)) refl v) y
+def sameFlip : (x : Choice) -> (y : Choice) -> Path Choice (same (flip x) (flip y)) (same x y) :=
+  fun (x : Choice) (y : Choice) => elim (fun (z : Choice) => Path Choice (same (flip z) (flip y)) (same z y))
+    (fun (u : Unit) => flipFlip y) (fun (u : Unit) => refl) x
+
+-- agree0 c: do member inl unit and member inr unit make the same choice. act does not change it (elim on g).
+def agree0 : (Member -> Choice) -> Choice := fun (c : Member -> Choice) => same (c (inl unit)) (c (inr unit))
+def agreeAct : (g : Group) -> (d : Member -> Choice) -> Path Choice (agree0 (act g d)) (agree0 d) :=
+  fun (g : Group) (d : Member -> Choice) => elim (fun (h : Group) => Path Choice (agree0 (act h d)) (agree0 d))
+    (fun (u : Unit) => refl) (fun (u : Unit) => sameFlip (d (inl unit)) (d (inr unit))) g
+
+-- The invariant fold: the orbitEq case is agreeAct after the path of r, the orbitSquash case is isSetChoice.
+def agree : Orbit -> Choice :=
+  fun (z : Orbit) => fold agree0
+    (fun (a : Member -> Choice) (b : Member -> Choice) (r : R a b) =>
+      trans Choice (agree0 a) (agree0 (act (witness r) b)) (agree0 b) (sym (cong agree0 (payload r))) (agreeAct (witness r) b))
+    isSetChoice z
+def agreeOnFlip : Path Choice (agree (orbitProj allB)) (agree (orbitProj allA)) := cong agree flipSame
+
+def agreeAll : Choice := agree (orbitProj allA)
+def agreeSplit : Choice := agree (orbitProj split)
+def agreeFlipped : Choice := agree (orbitProj (act (inr unit) split))
+
+-- Univalence on Choice (S5): flip is its own inverse, so isoToEquiv makes it an equivalence, and transport along its ua line reduces to flip.
+def flipEquiv : Equiv Choice Choice := isoToEquiv Choice Choice flip flip flipFlip flipFlip
+def flipPath : Path (Type 0) Choice Choice := ua Choice Choice flipEquiv
+def flipT : Path Choice (transp (fun (i : I) => flipPath @ i) i0 (inl unit)) (inr unit) := refl
+def flipAt : Choice := transp (fun (i : I) => flipPath @ i) i0 (inl unit)
+-- O22: hcomp at a Glue type over Choice is a glue element, so its unglue is an hcomp at Choice, and elim sees the constructor inl first.
+def GChoice : Type 0 := Glue Choice i0 (fun (_ : I) => [ ])
+def gIn : GChoice := glue (fun (_ : I) => [ ]) (inl unit)
+def gElim : Choice := elim (fun (c : Choice) => Choice) (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit)
+  (unglue (hcomp GChoice i0 (fun (_ : I) => [ ]) gIn))

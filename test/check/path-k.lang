@@ -1,0 +1,1 @@
+def bad : (p : Path Nat 0 0) -> Path (Path Nat 0 0) p refl := fun (p : Path Nat 0 0) => refl

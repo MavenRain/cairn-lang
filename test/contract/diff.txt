@@ -1,0 +1,19 @@
+-- The S9 B2 differential. A row: PROG START GUEST PERMUTED BALLOTS NAME... => OUTCOME SELF.
+-- test/gate.sh: `langc eval examples/PROG.lang GUEST` and PERMUTED print the Outcome constructor of index OUTCOME.
+-- test/run.sh: `langc --kit run` of `langc contract examples/PROG.lang --start START` over the casts of each NAME
+-- (`langc prove test/contract/BALLOTS.lang NAME 0u`), then outcome is OUTCOME, enact, and selfConstituting is SELF.
+-- test/precompile.sh: the same calls on the EVM. START is an outcome index; here its entry id is START too.
+dao 0 agree20 agree20p ballots m0c0 m1c0 => 0 1
+dao 0 agree11 agree11p ballots m0c0 m1c1 => 1 0
+dao 0 agree02 agree02p ballots m0c1 m1c1 => 0 1
+dao 1 keep20 keep20p ballots m0c0 m1c0 => 0 0
+dao 1 keep11 keep11p ballots m0c0 m1c1 => 0 0
+dao 1 keep02 keep02p ballots m0c1 m1c1 => 0 0
+dao3 0 maj30 maj30p ballots3 m0c0 m1c0 m2c0 => 0 1
+dao3 0 maj21 maj21p ballots3 m0c0 m1c0 m2c1 => 0 1
+dao3 0 maj12 maj12p ballots3 m0c0 m1c1 m2c1 => 1 0
+dao3 0 maj03 maj03p ballots3 m0c1 m1c1 m2c1 => 1 0
+dao3 1 all30 all30p ballots3 m0c0 m1c0 m2c0 => 0 0
+dao3 1 all21 all21p ballots3 m0c0 m1c0 m2c1 => 1 1
+dao3 1 all12 all12p ballots3 m0c0 m1c1 m2c1 => 1 1
+dao3 1 all03 all03p ballots3 m0c1 m1c1 m2c1 => 0 0

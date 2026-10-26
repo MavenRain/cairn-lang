@@ -1,0 +1,3 @@
+-- REFUSE_LAW (rule O7, leak L3): a binder annotation spells decrypt outside
+-- Trunc1, and the end point at i0 computes it; the codomain is Size.
+def annotLeak : Enc Size -> Size := fun (c : Enc Size) => (fun (p : Path Size (decrypt Size c) (decrypt Size c)) => p @ i0) refl

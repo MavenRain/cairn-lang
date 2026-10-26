@@ -1,0 +1,2 @@
+-- elim on Pos needs a motive over its index, then the position (S7 B1; Bag has no index since S3). This motive takes only the position at a fixed index n, so it is refused.
+def bad : (n : Size) -> Pos n -> Size := fun (n : Size) (c : Pos n) => elim (fun (d : Pos n) => Size) sz0 sz0 c

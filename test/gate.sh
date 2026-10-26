@@ -3,8 +3,14 @@
 set -eu
 fail=0
 count=0
+# kit LIST FILE prints --kit when FILE is a line of LIST. A row whose text uses a
+# kit name or a Nat or word literal is a kit row (orbit-lang S3); the others run
+# in guest mode.
+kit() {
+  if [ -f "$1" ] && rg -q -x -F "$2" "$1"; then echo --kit; fi
+}
 for prog in examples/*.lang; do
-  out=$(build/langc check "$prog" 2>&1) || true
+  out=$(build/langc $(kit examples/kit.txt "${prog#examples/}") check "$prog" 2>&1) || true
   count=$((count + 1))
   if [ "$out" != "ok" ]; then
     echo "FAIL $prog: $out"
@@ -26,7 +32,7 @@ refusals() {
     path="$1/$file"
     [ "$file" = "deep.lang" ] && path="$tmp/deep.lang"
     status=0
-    build/langc check "$path" 2>"$tmp/err" >/dev/null || status=$?
+    build/langc $(kit "$1/kit.txt" "$file") check "$path" 2>"$tmp/err" >/dev/null || status=$?
     first=$(head -n 1 "$tmp/err")
     checked=$((checked + 1))
     case "$status:$first" in
@@ -39,9 +45,24 @@ refusals() {
 refusals test/parse parse
 refusals test/check check
 
+# A REFUSE_KIT row refuses a kit item in guest mode only: `langc --kit check`
+# must print ok.
+kit_only=0
+while read -r file code; do
+  [ "$code" = "REFUSE_KIT" ] || continue
+  status=0
+  out=$(build/langc --kit check "test/check/$file" 2>&1) || status=$?
+  kit_only=$((kit_only + 1))
+  if [ "$status:$out" != "0:ok" ]; then
+    echo "FAIL $file: want ok under --kit, got exit $status: $out"
+    fail=$((fail + 1))
+  fi
+done <test/check/expect.txt
+echo "kit-only refusals: $kit_only checked"
+
 # A refl refusal shows both normal forms.
-build/langc check test/check/bad-refl.lang 2>"$tmp/err" >/dev/null || true
-if ! rg -q -F 'the left side normalizes to 1201, the right side normalizes to 1200' "$tmp/err"; then
+build/langc $(kit test/check/kit.txt bad-refl.lang) check test/check/bad-refl.lang 2>"$tmp/err" >/dev/null || true
+if ! rg -q -F 'the path at i1 is 1201, but the type needs 1200' "$tmp/err"; then
   echo "FAIL bad-refl.lang: the message does not show both normal forms"
   fail=$((fail + 1))
 fi
@@ -57,7 +78,7 @@ while IFS= read -r line; do
   name=$2
   shift 2
   status=0
-  got=$(build/langc eval "examples/$file.lang" "$name" "$@" 2>"$tmp/err") || status=$?
+  got=$(build/langc $(kit examples/kit.txt "$file.lang") eval "examples/$file.lang" "$name" "$@" 2>"$tmp/err") || status=$?
   first=$(head -n 1 "$tmp/err")
   want_err=""
   [ "$want" = "trap" ] && want_err="langc: EVAL_OVERFLOW: $name: "
@@ -69,14 +90,14 @@ while IFS= read -r line; do
 done <test/eval/expect.txt
 echo "evals: $evals checked"
 
-# eval_refused STATUS CODE NAME [ARGS]: `langc eval examples/entries.lang NAME
-# ARGS` must exit STATUS and print `langc: CODE: NAME: ...` on stderr.
+# eval_refused STATUS CODE NAME [ARGS]: `langc --kit eval examples/entries.lang
+# NAME ARGS` must exit STATUS and print `langc: CODE: NAME: ...` on stderr.
 eval_refused() {
   want_status=$1
   code=$2
   shift 2
   status=0
-  build/langc eval examples/entries.lang "$@" 2>"$tmp/err" >/dev/null || status=$?
+  build/langc --kit eval examples/entries.lang "$@" 2>"$tmp/err" >/dev/null || status=$?
   case "$status:$(head -n 1 "$tmp/err")" in
     "$want_status:langc: $code: $1: "*) ;;
     *) echo "FAIL eval $*: want exit $want_status and $code, got exit $status"; fail=$((fail + 1)) ;;
@@ -88,97 +109,106 @@ eval_refused 2 EVAL_ARGS addPrice 18446744073709551616 1
 eval_refused 2 EVAL_ARGS pick 2 4 9
 eval_refused 1 EVAL_ENTRY nope
 
+# Each line of test/prove/expect.txt is `FILE NAME [POLL] => WORDS`. `langc prove`
+# must exit 0 and print the words of WORDS, one per line (S8 B2c).
+proves=0
+while IFS= read -r line; do
+  want=${line#* => }
+  set -- ${line%% => *}
+  file=$1
+  name=$2
+  shift 2
+  status=0
+  build/langc $(kit examples/kit.txt "$file.lang") prove "examples/$file.lang" "$name" "$@" >"$tmp/out" 2>"$tmp/err" || status=$?
+  got=$(tr '\n' ' ' <"$tmp/out")
+  got=${got% }
+  proves=$((proves + 1))
+  case "$status|$got" in
+    "0|$want") ;;
+    *) echo "FAIL prove $file $name: want $want, got exit $status: $got"; fail=$((fail + 1)) ;;
+  esac
+done <test/prove/expect.txt
+echo "proves: $proves checked"
+
+# prove_refused STATUS CODE FILE NAME [POLL]: `langc prove examples/FILE.lang
+# NAME POLL` must exit STATUS and print `langc: CODE: NAME: ...` on stderr.
+prove_refused() {
+  want_status=$1
+  code=$2
+  file=$3
+  shift 3
+  status=0
+  build/langc prove "examples/$file.lang" "$@" 2>"$tmp/err" >/dev/null || status=$?
+  case "$status:$(head -n 1 "$tmp/err")" in
+    "$want_status:langc: $code: $1: "*) ;;
+    *) echo "FAIL prove $file $*: want exit $want_status and $code, got exit $status"; fail=$((fail + 1)) ;;
+  esac
+}
+prove_refused 1 PROVE_BALLOT dao w0
+prove_refused 2 EVAL_ARGS dao b0 x
+
+# The target (S2). The EVM writer is not ported and the cairn target comes in
+# S8, so `langc build examples/dao.lang` must exit 1, print `langc:
+# REFUSE_LOWER: -: ...target pending S8...` on stderr and write nothing on
+# stdout.
+builds=0
+status=0
+build/langc $(kit examples/kit.txt dao.lang) build examples/dao.lang >"$tmp/out" 2>"$tmp/err" || status=$?
+builds=$((builds + 1))
+case "$status:$(head -n 1 "$tmp/err"):$(wc -c <"$tmp/out" | tr -d ' ')" in
+  "1:langc: REFUSE_LOWER: -: "*"target pending S8"*":0") ;;
+  *) echo "FAIL build dao: want exit 1, REFUSE_LOWER and target pending S8, got exit $status: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)) ;;
+esac
+echo "build refusals: $builds checked"
+
+# The differential (S9 B2) in the guest. A row of test/contract/diff.txt is
+# `PROG START GUEST PERMUTED BALLOTS NAME... => OUTCOME SELF`: `langc eval
+# examples/PROG.lang` of GUEST (the canonical config) and of PERMUTED (a config
+# outside the act orbit) must exit 0 and print the Outcome constructor of index
+# OUTCOME. The rows are read on fd 3, so langc cannot read them.
+# ctor_index TEXT prints the constructor index of TEXT: each leading `inr (` adds
+# 1, then `inl unit` adds 0 and `inr unit` adds 1. Other text prints -.
+ctor_index() {
+  _text=$1
+  _index=0
+  while :; do
+    case $_text in
+      "inr ("*) _text=${_text#"inr ("}; _index=$((_index + 1)) ;;
+      *) break ;;
+    esac
+  done
+  case ${_text%%")"*} in
+    "inl unit") echo "$_index" ;;
+    "inr unit") echo $((_index + 1)) ;;
+    *) echo - ;;
+  esac
+}
+diffs=0
+while read -r line <&3; do
+  case $line in --*|'') continue ;; esac
+  set -- ${line%% => *}
+  want=${line#* => }
+  for name in "$3" "$4"; do
+    status=0
+    got=$(build/langc $(kit examples/kit.txt "$1.lang") eval "examples/$1.lang" "$name" 2>"$tmp/err") || status=$?
+    diffs=$((diffs + 1))
+    if [ "$status" -ne 0 ] || [ "$(ctor_index "$got")" != "${want%% *}" ]; then
+      echo "FAIL differential $1 $name: want outcome ${want%% *}, got exit $status: $got $(head -n 1 "$tmp/err")"
+      fail=$((fail + 1))
+    fi
+  done
+done 3<test/contract/diff.txt
+echo "differential: $diffs guest evals checked"
+
 status=0
 build/langc 2>/dev/null || status=$?
 [ "$status" -eq 2 ] || { echo "FAIL usage: want exit 2, got $status"; fail=$((fail + 1)); }
 status=0
+build/langc --kit 2>/dev/null || status=$?
+[ "$status" -eq 2 ] || { echo "FAIL usage --kit: want exit 2, got $status"; fail=$((fail + 1)); }
+status=0
 build/langc check "$tmp/missing.lang" 2>/dev/null || status=$?
 [ "$status" -eq 2 ] || { echo "FAIL missing file: want exit 2, got $status"; fail=$((fail + 1)); }
-
-# The IR: each example lowers, with one func line for each entry.
-irs=0
-for f in examples/*.lang; do
-  irs=$((irs + 1))
-  status=0
-  build/langc ir "$f" > "$tmp/ir.txt" 2> "$tmp/ir.err" || status=$?
-  funcs=$(rg -c '^func ' "$tmp/ir.txt" || echo 0)
-  entries=$(build/langc abi "$f" | rg -c '.' || echo 0)
-  [ "$status" -eq 0 ] && [ "$funcs" -eq "$entries" ] || { echo "FAIL ir $f: exit $status, $funcs funcs for $entries entries: $(head -n 1 "$tmp/ir.err")"; fail=$((fail + 1)); }
-done
-echo "ir: $irs lowered"
-status=0
-build/langc check test/ir/closure.lang > /dev/null || status=$?
-[ "$status" -eq 0 ] || { echo "FAIL closure.lang: check exit $status"; fail=$((fail + 1)); }
-status=0
-first=$(build/langc ir test/ir/closure.lang 2>&1 > /dev/null) || status=$?
-case "$status:$first" in
-  "1:langc: REFUSE_RUNTIME_CLOSURE: "*) ;;
-  *) echo "FAIL closure.lang: want exit 1 and REFUSE_RUNTIME_CLOSURE, got exit $status: $first"; fail=$((fail + 1)) ;;
-esac
-got=$(build/langc eval test/ir/lazy.lang lazy 3 2>&1) || true
-[ "$got" = "3" ] || { echo "FAIL lazy.lang: want 3, got $got"; fail=$((fail + 1)); }
-build/langc ir test/ir/lazy.lang > /dev/null || { echo "FAIL lazy.lang: ir"; fail=$((fail + 1)); }
-for want in "foldOnes 3:6" "mapUp 3:18" "bindUp 3:36" "filterUp 5:3" "trapHead 5:1" "trapSum 5:trap" "trapSum 2:3" \
-  "filterTrap 2:3" "filterTrap 5:trap" "bindTrap 5:1" "stackSum 3:15" "stackTrap 0:7" "stackTrap 2:5"; do
-  call=${want%%:*}
-  got=$(build/langc eval test/ir/spine.lang ${call% *} ${call#* } 2>"$tmp/err") || true
-  want_err=""
-  [ "${want#*:}" = "trap" ] && want_err="langc: EVAL_OVERFLOW: ${call% *}: "
-  case "$got|$(head -n 1 "$tmp/err")" in
-    "${want#*:}|$want_err"*) ;;
-    *) echo "FAIL spine.lang $call: want ${want#*:}, got $got"; fail=$((fail + 1)) ;;
-  esac
-done
-build/langc ir test/ir/spine.lang > /dev/null || { echo "FAIL spine.lang: ir"; fail=$((fail + 1)); }
-status=0
-build/langc check test/ir/tree.lang > /dev/null || status=$?
-[ "$status" -eq 0 ] || { echo "FAIL tree.lang: check exit $status"; fail=$((fail + 1)); }
-status=0
-first=$(build/langc ir test/ir/tree.lang 2>&1 > /dev/null) || status=$?
-case "$status:$first" in
-  "1:langc: REFUSE_RUNTIME_TREE: "*) ;;
-  *) echo "FAIL tree.lang: want exit 1 and REFUSE_RUNTIME_TREE, got exit $status: $first"; fail=$((fail + 1)) ;;
-esac
-
-# The Wasm target: each module builds and is valid. Then the differential: on
-# the grid of test/grid.awk, node and `langc eval` give the same result for
-# each entry (trap == trap). The stderr of eval is not merged into stdout.
-wasms=0
-cases=0
-mismatches=0
-for f in examples/*.lang test/ir/spine.lang test/ir/lazy.lang test/ir/proof-trap.lang; do
-  w="$tmp/$(basename "$f" .lang).wasm"
-  wasms=$((wasms + 1))
-  if ! build/langc build "$f" -o "$w" 2>"$tmp/w.err" || ! wasm-validate "$w" 2>>"$tmp/w.err" ||
-    ! wasm-objdump -x "$w" >/dev/null 2>>"$tmp/w.err"; then
-    echo "FAIL wasm $f: $(head -n 1 "$tmp/w.err")"
-    fail=$((fail + 1))
-    continue
-  fi
-  build/langc ir "$f" | awk -f test/grid.awk >"$tmp/cases.txt"
-  : >"$tmp/want.txt"
-  while read -r call; do
-    status=0
-    want=$(build/langc eval "$f" $call 2>/dev/null) || status=$?
-    [ "$status" -eq 0 ] || want="eval-exit-$status"
-    echo "$want" >>"$tmp/want.txt"
-  done <"$tmp/cases.txt"
-  if ! node test/run-wasm.mjs "$w" - <"$tmp/cases.txt" >"$tmp/got.txt" 2>"$tmp/w.err"; then
-    echo "FAIL node $f: $(head -n 1 "$tmp/w.err")"
-    fail=$((fail + 1))
-    continue
-  fi
-  cases=$((cases + $(rg -c '.' "$tmp/cases.txt" || echo 0)))
-  paste -d '|' "$tmp/cases.txt" "$tmp/want.txt" "$tmp/got.txt" | awk -F '|' '$2 != $3' >"$tmp/bad.txt"
-  bad=$(rg -c '.' "$tmp/bad.txt" || echo 0)
-  mismatches=$((mismatches + bad))
-  [ "$bad" -eq 0 ] || { echo "FAIL differential $f: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
-done
-echo "wasm: $wasms modules valid"
-echo "differential: $cases cases, $mismatches mismatches"
-# A Flag argument larger than 1 traps (langc eval refuses it with EVAL_ARGS).
-got=$(node test/run-wasm.mjs "$tmp/entries.wasm" pick 2 4 9 2>&1) || true
-[ "$got" = "trap" ] || { echo "FAIL wasm pick 2 4 9: want trap, got $got"; fail=$((fail + 1)); }
 rm -rf "$tmp"
 
 if rg -n '\x{2013}|\x{2014}' . >/dev/null; then

@@ -1,0 +1,3 @@
+def ev : Path ((p : Path Nat 0 0) -> Nat) (fun (p : Path Nat 0 0) => 0) (fun (p : Path Nat 0 0) => 0) :=
+  fun (i : I) => fun (p : Path Nat 0 0) => p @ i
+def bad : Path (Path ((p : Path Nat 0 0) -> Nat) (fun (p : Path Nat 0 0) => 0) (fun (p : Path Nat 0 0) => 0)) ev refl := refl

@@ -1,0 +1,1 @@
+def bad : (i : I) -> Nat := fun (i : I) => 0

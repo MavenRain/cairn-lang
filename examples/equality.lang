@@ -1,9 +1,8 @@
--- Formers F12 and F13: equality, transport and congruence.
+-- Paths: refl, sym and cong. trans and transport are guest defs in domain/domain.lang (S3).
 def price : Nat := 1200
 def cost : Nat := 1200
-def same : Eq Nat price cost := refl
-def back : Eq Nat cost price := symm same
-def round : Eq Nat price price := trans same back
-def moved : (P : (n : Nat) -> Type 0) -> (u : P price) -> P cost :=
-  fun (P : (n : Nat) -> Type 0) (u : P price) => transport P same u
-def bumped : Eq Nat (natAdd price 1) (natAdd cost 1) := cong (fun (n : Nat) => natAdd n 1) same
+def same : Path Nat price cost := refl
+def back : Path Nat cost price := sym same
+def bumped : Path Nat (natAdd price 1) (natAdd cost 1) := cong (fun (n : Nat) => natAdd n 1) same
+def start : Nat := same @ i0
+def backEnd : Nat := (sym same) @ i1

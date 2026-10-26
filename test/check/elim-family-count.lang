@@ -1,0 +1,2 @@
+-- elim on Size needs a motive, one case for each of its two constructors, then a scrutinee (S7 B1). Here a third case stands where the scrutinee must be, so the scrutinee has the wrong type.
+def bad : Size -> Size := fun (s : Size) => elim (fun (t : Size) => Size) sz0 (fun (k : Size) (ih : Size) => szS ih) (fun (k : Size) (ih : Size) => k) s

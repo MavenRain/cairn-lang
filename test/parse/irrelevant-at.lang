@@ -1,0 +1,2 @@
+-- No irrelevant binder marker: @irrelevant is not a binder form.
+def f : (@irrelevant x : Nat) -> Nat := fun (x : Nat) => x

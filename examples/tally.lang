@@ -1,0 +1,97 @@
+-- Part D (S9, PLAN 3.1, Q-S9-1 .. Q-S9-5): encrypted ballots and the tally
+-- law. A ballot is one Enc Hist, the one-hot histogram of a vote over
+-- Choice. tallyEnc sums the n + 1 ballots of FinOf n under Enc by encOp2
+-- (elim on the size, the motive mentions FinOf), and count is the same sum
+-- on plain histograms. lawTallyEnc (by elim on n) says the opening of the
+-- tally is the count of the decrypted ballots. lawHist adds the one-hot
+-- premise: the opening is the histogram of the votes, so the tally shows
+-- no ballot. pass and decide read an opened histogram (a tie keeps the old
+-- Params). sizeAdd, sizeSub, leB and FinOf are copies from
+-- examples/intent.lang.
+def sizeAdd : Size -> Size -> Size :=
+  fun (n : Size) (m : Size) => fold n (fun (r : Size) => szS r) m
+def sizeSub : Size -> Size -> Size :=
+  fun (a : Size) (b : Size) => fold a (fun (r : Size) => sizePred r) b
+def leB : Size -> Size -> Sum Unit Unit :=
+  fun (a : Size) (b : Size) => fold (inl unit) (fun (r : Sum Unit Unit) => inr unit) (sizeSub a b)
+def FinOf : Size -> Type 0 := fun (n : Size) => fold Unit (fun (r : Type 0) => Option r) n
+def Choice : Type 0 := Sum Unit Unit
+def Hist : Type 0 := Choice -> Size
+def Ballot : Type 0 := Enc Hist
+def Ballots : Size -> Type 0 := fun (n : Size) => FinOf n -> Ballot
+def addH : Hist -> Hist -> Hist :=
+  fun (h : Hist) (g : Hist) => fun (c : Choice) => sizeAdd (h c) (g c)
+-- ind v is the one-hot histogram of the vote v: 1 at v, else 0.
+def ind : Choice -> Choice -> Size :=
+  fun (v : Choice) (c : Choice) =>
+  either (fun (u : Unit) => either (fun (w : Unit) => szS sz0) (fun (w : Unit) => sz0) c)
+    (fun (u : Unit) => either (fun (w : Unit) => sz0) (fun (w : Unit) => szS sz0) c) v
+def tallyEnc : (n : Size) -> Ballots n -> Ballot :=
+  fun (n : Size) => elim (fun (t : Size) => Ballots t -> Ballot)
+    (fun (bs : Ballots sz0) => bs unit)
+    (fun (k : Size) (ih : Ballots k -> Ballot) => fun (bs : Ballots (szS k)) =>
+      encOp2 Hist Hist Hist addH (bs none) (ih (fun (j : FinOf k) => bs (some j)))) n
+def count : (n : Size) -> (FinOf n -> Hist) -> Hist :=
+  fun (n : Size) => elim (fun (t : Size) => (FinOf t -> Hist) -> Hist)
+    (fun (hs : FinOf sz0 -> Hist) => hs unit)
+    (fun (k : Size) (ih : (FinOf k -> Hist) -> Hist) => fun (hs : FinOf (szS k) -> Hist) =>
+      addH (hs none) (ih (fun (j : FinOf k) => hs (some j)))) n
+def hist : (n : Size) -> (FinOf n -> Choice) -> Hist :=
+  fun (n : Size) (v : FinOf n -> Choice) => count n (fun (k : FinOf n) => ind (v k))
+-- lawOp2H is lawOp2 of examples/enc.lang at Hist.
+def lawOp2H : (c1 : Ballot) -> (c2 : Ballot) ->
+  Path Hist (decrypt Hist (encOp2 Hist Hist Hist addH c1 c2)) (addH (decrypt Hist c1) (decrypt Hist c2)) :=
+  fun (c1 : Ballot) (c2 : Ballot) =>
+  elim (fun (d1 : Ballot) => Path Hist (decrypt Hist (encOp2 Hist Hist Hist addH d1 c2)) (addH (decrypt Hist d1) (decrypt Hist c2)))
+    (fun (a : Hist) => elim (fun (d2 : Ballot) => Path Hist (decrypt Hist (encOp2 Hist Hist Hist addH (encEta Hist a) d2)) (addH a (decrypt Hist d2)))
+      (fun (b : Hist) => refl) c2) c1
+-- The tally law of PLAN 3.1. The step is lawOp2H at the head ballot, then
+-- the induction hypothesis on the tail under addH.
+def lawTallyEnc : (q : Quorum) -> (n : Size) -> (bs : Ballots n) ->
+  Path Hist (open Hist q (tallyEnc n bs)) (count n (fun (k : FinOf n) => decrypt Hist (bs k))) :=
+  fun (q : Quorum) (n : Size) =>
+  elim (fun (t : Size) => (bs : Ballots t) -> Path Hist (open Hist q (tallyEnc t bs)) (count t (fun (k : FinOf t) => decrypt Hist (bs k))))
+    (fun (bs : Ballots sz0) => refl)
+    (fun (k : Size) (ih : (bs : Ballots k) -> Path Hist (open Hist q (tallyEnc k bs)) (count k (fun (j : FinOf k) => decrypt Hist (bs j)))) =>
+      fun (bs : Ballots (szS k)) =>
+      trans Hist (decrypt Hist (tallyEnc (szS k) bs))
+        (addH (decrypt Hist (bs none)) (decrypt Hist (tallyEnc k (fun (j : FinOf k) => bs (some j)))))
+        (count (szS k) (fun (j : FinOf (szS k)) => decrypt Hist (bs j)))
+        (lawOp2H (bs none) (tallyEnc k (fun (j : FinOf k) => bs (some j))))
+        (fun (i : I) => addH (decrypt Hist (bs none)) (ih (fun (j : FinOf k) => bs (some j)) @ i))) n
+-- The anonymity law under Enc: when each ballot opens to the one-hot
+-- histogram of its vote, the tally opens to the histogram of the votes.
+def lawHist : (q : Quorum) -> (n : Size) -> (bs : Ballots n) -> (v : FinOf n -> Choice) ->
+  ((k : FinOf n) -> Path Hist (decrypt Hist (bs k)) (ind (v k))) ->
+  Path Hist (open Hist q (tallyEnc n bs)) (hist n v) :=
+  fun (q : Quorum) (n : Size) (bs : Ballots n) (v : FinOf n -> Choice) (p : (k : FinOf n) -> Path Hist (decrypt Hist (bs k)) (ind (v k))) =>
+  trans Hist (open Hist q (tallyEnc n bs)) (count n (fun (k : FinOf n) => decrypt Hist (bs k))) (hist n v)
+    (lawTallyEnc q n bs) (fun (i : I) => count n (fun (k : FinOf n) => p k @ i))
+-- Params is the one field window (O10, O37). pass is yes (inl) when the yes
+-- count is above the no count, so a tie fails. decide takes the new Params
+-- on a pass, else it keeps the old.
+def Params : Type 0 := Size
+def pass : Hist -> Sum Unit Unit :=
+  fun (h : Hist) => leB (szS (h (inr unit))) (h (inl unit))
+def decide : Hist -> Params -> Params -> Params :=
+  fun (h : Hist) (old : Params) (new : Params) => either (fun (u : Unit) => new) (fun (u : Unit) => old) (pass h)
+-- Eval values: three ballots (n = 2) vote yes, yes and no. The openings are
+-- under trunc1 (a guest law type); the decisions read the plain histogram.
+-- The tie (n = 1, yes and no) keeps the old Params 4.
+def yes : Choice := inl unit
+def no : Choice := inr unit
+def n1 : Size := szS sz0
+def n2 : Size := szS n1
+def n4 : Size := sizeAdd n2 n2
+def n6 : Size := sizeAdd n4 n2
+def votes3 : FinOf n2 -> Choice :=
+  fun (k : FinOf n2) => option yes (fun (j : FinOf n1) => option yes (fun (u : Unit) => no) j) k
+def ballots3 : Ballots n2 := fun (k : FinOf n2) => encEta Hist (ind (votes3 k))
+def q2 : Quorum := quorum n2 (szS n2)
+def yesCount : Trunc1 Size := trunc1 Size (open Hist q2 (tallyEnc n2 ballots3) yes)
+def noCount : Trunc1 Size := trunc1 Size (open Hist q2 (tallyEnc n2 ballots3) no)
+def histYes : Size := hist n2 votes3 yes
+def histNo : Size := hist n2 votes3 no
+def passed : Sum Unit Unit := pass (hist n2 votes3)
+def votesTie : FinOf n1 -> Choice := fun (k : FinOf n1) => option yes (fun (u : Unit) => no) k
+def kept : Params := decide (hist n1 votesTie) n4 n6

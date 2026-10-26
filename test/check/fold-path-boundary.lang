@@ -1,0 +1,3 @@
+-- The loop case must be a path from the base case to the base case. This
+-- path is 1 at i0, but the base case is 0.
+def f : S1 -> Nat := fun (x : S1) => fold 0 (fun (i : I) => 1) x

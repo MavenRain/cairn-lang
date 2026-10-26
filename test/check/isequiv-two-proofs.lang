@@ -1,0 +1,4 @@
+-- isEquiv is an ordinary type (O17): two proofs that one map is an
+-- equivalence are not convertible, so refl does not relate them.
+def bad : (A : Type 0) -> (f : A -> A) -> (p : isEquiv A A f) -> (q : isEquiv A A f) -> Path (isEquiv A A f) p q :=
+  fun (A : Type 0) (f : A -> A) (p : isEquiv A A f) (q : isEquiv A A f) => refl

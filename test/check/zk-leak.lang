@@ -1,0 +1,5 @@
+-- REFUSE_LAW (S7, Q-S7-2 (a), rule O7): verified is a law def, as observe; a
+-- def that uses it outside a ZKProof or Trunc1 argument needs a Path or
+-- Trunc1 codomain, not Size.
+def leakProof : Transcript Size -> Size :=
+  fun (t : Transcript Size) => (fun (p : ZKProof Size) => sz0) (verified Size t)

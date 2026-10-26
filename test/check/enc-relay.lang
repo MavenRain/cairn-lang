@@ -1,0 +1,7 @@
+-- REFUSE_LAW (rule O7, mutant k2): lawBody uses decrypt in its body only, and
+-- the ends of its Path type are clean (sz0), so it is a law-only def and is
+-- accepted. relay takes its end point at i0; it is law-only only through the
+-- guest law-only def lawBody, and its codomain is Size.
+def lawBody : (c : Enc Size) -> Path Size sz0 sz0 :=
+  fun (c : Enc Size) => fun (i : I) => (fun (x : Size) => sz0) (decrypt Size c)
+def relay : Enc Size -> Size := fun (c : Enc Size) => lawBody c @ i0

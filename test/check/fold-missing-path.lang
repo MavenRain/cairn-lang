@@ -1,0 +1,3 @@
+-- A fold of S1 needs a case for each constructor: base and loop. This fold
+-- has the base case only.
+def f : S1 -> Nat := fun (x : S1) => fold 0 x

@@ -1,0 +1,8 @@
+-- Law 6, the bifurcation (S10 B1): beta 1/1 is not above 1, so betaGt gives inr unit, and the refl end site refuses
+-- the reading of beta 1 as beta above 1.
+def Choice : Type 0 := Sum Unit Unit
+def sizeOne : Size := szS sz0
+def betaGt : Size -> Size -> Choice :=
+  fun (n : Size) => elim (fun (k : Size) => Size -> Choice) (fun (d : Size) => inr unit)
+    (fun (k : Size) (ih : Size -> Choice) (d : Size) => elim (fun (j : Size) => Choice) (inl unit) (fun (j : Size) (jh : Choice) => ih j) d) n
+def betaCritical : Path Choice (betaGt sizeOne sizeOne) (inl unit) := refl

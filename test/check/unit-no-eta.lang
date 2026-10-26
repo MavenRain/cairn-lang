@@ -1,0 +1,2 @@
+-- No eta for Unit and no strict proposition: two Unit variables are not convertible, so refl does not prove them equal (elim gives the path).
+def bad : (u : Unit) -> (v : Unit) -> Path Unit u v := fun (u : Unit) (v : Unit) => refl

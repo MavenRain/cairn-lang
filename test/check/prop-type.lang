@@ -1,0 +1,2 @@
+-- No Prop-like universe (orbit-lang S1 ruling): Prop is not a type.
+def P : Prop := Nat

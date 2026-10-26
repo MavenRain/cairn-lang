@@ -1,21 +1,22 @@
 /* The langc command line. SHARED by the tcc kits.
    Exit 0: ok. Exit 1: the program is refused. Exit 2: usage or IO. */
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "front/check.h"
 #include "front/front.h"
-#include "front/lower.h"
-#include "target.h"
 
 #define ARENA_LIMIT_BYTES ((size_t)1 << 30)
 
 typedef enum {
   CMD_CHECK,
   CMD_EVAL,
+  CMD_RUN,
   CMD_IR,
   CMD_ABI,
-  CMD_BUILD
+  CMD_BUILD,
+  CMD_PROVE
 } Command;
 
 typedef struct {
@@ -24,8 +25,11 @@ typedef struct {
   const char *entry;
   char **args;
   int arg_count;
+  const char *script_path;
   const char *out_path;
   int runtime;
+  int json;
+  CheckMode mode; /* orbit-lang S3: --kit selects the kit mode */
 } Options;
 
 static const struct {
@@ -34,17 +38,22 @@ static const struct {
 } COMMANDS[] = {
   {"check", CMD_CHECK},
   {"eval", CMD_EVAL},
+  {"run", CMD_RUN},
   {"ir", CMD_IR},
   {"abi", CMD_ABI},
   {"build", CMD_BUILD},
+  {"prove", CMD_PROVE},
 };
 
 static int usage(FILE *err) {
-  fputs("usage: langc check PROG\n"
-        "       langc eval PROG NAME [ARGS...]\n"
-        "       langc ir PROG\n"
-        "       langc abi PROG\n"
-        "       langc build PROG -o OUT [--runtime]\n", err);
+  fputs("usage: langc [--kit] check PROG\n"
+        "       langc [--kit] eval PROG NAME [ARGS...]\n"
+        "       langc [--kit] run PROG SCRIPT\n"
+        "       langc [--kit] ir PROG\n"
+        "       langc [--kit] abi PROG [--text]\n"
+        "       langc [--kit] build PROG [-o OUT] [--runtime]\n"
+        "       langc [--kit] prove PROG NAME [POLL]\n"
+        "--kit: the kit mode, the trusted test scope of the kit gate\n", err);
   return 2;
 }
 
@@ -67,7 +76,7 @@ static int parse_build_options(int argc, char **argv, Options *opt, Diag *diag) 
     opt->runtime |= is_runtime;
     i += is_out;
   }
-  return opt->out_path != NULL ? 1 : diag_fail(diag, "USAGE", NULL, "build needs -o OUT");
+  return 1;
 }
 
 static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
@@ -79,16 +88,31 @@ static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
   switch (opt->command) {
     case CMD_CHECK:
     case CMD_IR:
-    case CMD_ABI:
       return argc == 3 ? 1 : diag_fail(diag, "USAGE", NULL, "too many arguments");
+    case CMD_ABI:
+      /* The JSON ABI is the default; --text gives the C-K4-16 lines (C-c7-1). */
+      opt->json = argc == 3;
+      return argc == 3 || (argc == 4 && strcmp(argv[3], "--text") == 0) ? 1
+        : diag_fail(diag, "USAGE", NULL, "abi takes only --text after the program");
     case CMD_EVAL:
       if (argc < 4) return diag_fail(diag, "USAGE", NULL, "eval needs a definition name");
       opt->entry = argv[3];
       opt->args = argv + 4;
       opt->arg_count = argc - 4;
       return 1;
+    case CMD_RUN:
+      if (argc != 4) return diag_fail(diag, "USAGE", NULL, "run needs a program and a script");
+      opt->script_path = argv[3];
+      return 1;
     case CMD_BUILD:
       return parse_build_options(argc, argv, opt, diag);
+    case CMD_PROVE:
+      if (argc < 4) return diag_fail(diag, "USAGE", NULL, "prove needs a definition name");
+      if (argc > 5) return diag_fail(diag, "USAGE", NULL, "prove takes only a poll id after the name");
+      opt->entry = argv[3];
+      opt->args = argv + 4;
+      opt->arg_count = argc - 4;
+      return 1;
   }
   return 0;
 }
@@ -108,29 +132,17 @@ static int read_source(Arena *arena, const char *path, char **out, size_t *len, 
   return 1;
 }
 
-/* Lowers the entries, then runs the ir, abi or build command. */
-static int run_target(const Options *opt, Machine *machine, Diag *diag) {
-  IrProgram prog;
-  FILE *out;
-  size_t i;
-  int ok = 1;
-  if (!lower_program(machine, &prog)) return 1;
-  switch (opt->command) {
-    case CMD_IR:
-      ir_print(&prog, stdout);
-      return 0;
-    case CMD_ABI:
-      for (i = 0; i < prog.func_count && ok; i++) ok = target_abi_line(&prog.funcs[i], stdout, stderr);
-      return ok ? 0 : 1;
-    case CMD_CHECK:
-    case CMD_EVAL:
-    case CMD_BUILD:
-      break;
+static const char *command_word(Command command) {
+  switch (command) {
+    case CMD_CHECK: return "check";
+    case CMD_EVAL: return "eval";
+    case CMD_RUN: return "run";
+    case CMD_IR: return "ir";
+    case CMD_ABI: return "abi";
+    case CMD_BUILD: return "build";
+    case CMD_PROVE: return "prove";
   }
-  out = fopen(opt->out_path, "wb");
-  if (out == NULL) return diag_fail(diag, "IO", NULL, "cannot write '%s'", opt->out_path) + 1;
-  ok = target_write(&prog, opt->runtime ? TARGET_PART_RUNTIME : TARGET_PART_MAIN, out, stderr);
-  return fclose(out) == 0 && ok ? 0 : 1;
+  return "?";
 }
 
 static int run(const Options *opt, Arena *arena, Diag *diag) {
@@ -140,33 +152,47 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
   DeclList decls;
   if (!front_load(arena, opt->prog_path, text, len, &decls, diag)) return 1;
   Machine machine;
-  if (!check_program(arena, &decls, &machine, diag)) return 1;
+  if (!check_program(arena, &decls, &machine, diag, opt->mode)) return 1;
   switch (opt->command) {
     case CMD_CHECK:
       puts("ok");
       return 0;
     case CMD_EVAL:
       return eval_command(&machine, opt->entry, opt->args, opt->arg_count, stdout, stderr);
-    case CMD_IR:
-    case CMD_ABI:
+    case CMD_RUN: {
+      char *script = NULL;
+      size_t script_len = 0;
+      if (!read_source(arena, opt->script_path, &script, &script_len, diag)) return 2;
+      return run_command(&machine, opt->script_path, script, script_len, stdout);
+    }
+    case CMD_PROVE:
+      signal(SIGPIPE, SIG_IGN);
+      return prove_command(&machine, opt->entry, opt->arg_count == 1 ? opt->args[0] : NULL, stdout, stderr);
     case CMD_BUILD:
+    case CMD_ABI:
+      /* The EVM writer is not ported: the cairn target comes in S8. */
+      return diag_fail(diag, "REFUSE_LOWER", NULL, "%s: target pending S8", command_word(opt->command)) + 1;
+    case CMD_IR:
       break;
   }
-  return run_target(opt, &machine, diag);
+  diag_fail(diag, "PLANNED", NULL, "the %s command is not built yet (target pending S8)", command_word(opt->command));
+  return 1;
 }
 
 int main(int argc, char **argv) {
   Diag diag;
   diag_init(&diag);
   Options opt;
-  if (!parse_options(argc, argv, &opt, &diag)) {
+  int kit = argc > 1 && strcmp(argv[1], "--kit") == 0;
+  if (!parse_options(argc - kit, argv + kit, &opt, &diag)) {
     diag_print(&diag, stderr);
     return usage(stderr);
   }
+  opt.mode = kit ? CHECK_KIT : CHECK_GUEST;
   Arena arena;
   arena_init(&arena, ARENA_LIMIT_BYTES);
   int status = run(&opt, &arena, &diag);
   arena_release(&arena);
-  if (status != 0 && diag.set) diag_print(&diag, stderr);
+  if (status != 0) diag_print(&diag, stderr);
   return status;
 }

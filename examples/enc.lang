@@ -1,0 +1,31 @@
+-- The sealed Enc monad (S5, rule O7). Enc is the identity cell monad with a
+-- sealed eliminator: a guest def that uses decrypt, observe or an elim,
+-- fold or projection of Enc is law-only and needs a law type (a Path or a
+-- Trunc1 codomain). The laws below are law-only and have Path codomains.
+-- privacy is the squash1 path of observe. settle names decrypt only under
+-- Trunc1 in a Pi domain, so it is not law-only and returns a Size. The
+-- encBind, encMap and encOp2 values never open a ciphertext.
+def sizeAdd : Size -> Size -> Size :=
+  fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
+def lawEta : (a : Size) -> Path Size (decrypt Size (encEta Size a)) a :=
+  fun (a : Size) => refl
+def lawBind : (c : Enc Size) -> (f : Size -> Enc Size) ->
+  Path Size (decrypt Size (encBind Size Size c f)) (decrypt Size (f (decrypt Size c))) :=
+  fun (c : Enc Size) (f : Size -> Enc Size) =>
+  elim (fun (d : Enc Size) => Path Size (decrypt Size (encBind Size Size d f)) (decrypt Size (f (decrypt Size d)))) (fun (a : Size) => refl) c
+def lawOp2 : (c1 : Enc Size) -> (c2 : Enc Size) ->
+  Path Size (decrypt Size (encOp2 Size Size Size sizeAdd c1 c2)) (sizeAdd (decrypt Size c1) (decrypt Size c2)) :=
+  fun (c1 : Enc Size) (c2 : Enc Size) =>
+  elim (fun (d1 : Enc Size) => Path Size (decrypt Size (encOp2 Size Size Size sizeAdd d1 c2)) (sizeAdd (decrypt Size d1) (decrypt Size c2)))
+    (fun (a : Size) => elim (fun (d2 : Enc Size) => Path Size (decrypt Size (encOp2 Size Size Size sizeAdd (encEta Size a) d2)) (sizeAdd a (decrypt Size d2)))
+      (fun (b : Size) => refl) c2) c1
+def privacy : (c : Enc Size) -> (d : Enc Size) -> Path (Trunc1 Size) (observe Size c) (observe Size d) :=
+  fun (c : Enc Size) (d : Enc Size) => fun (i : I) => squash1 Size (observe Size c) (observe Size d) i
+def settle : (c : Enc Size) -> Trunc1 (Path Size (decrypt Size c) (szS sz0)) -> Size :=
+  fun (c : Enc Size) (p : Trunc1 (Path Size (decrypt Size c) (szS sz0))) => szS sz0
+def encOne : Enc Size := encEta Size (szS sz0)
+def encTwo : Enc Size := encMap Size Size (fun (s : Size) => szS s) encOne
+def encSum : Enc Size := encOp2 Size Size Size sizeAdd encOne encTwo
+def encDouble : Enc Size -> Enc Size :=
+  fun (c : Enc Size) => encBind Size Size c (fun (a : Size) => encEta Size (sizeAdd a a))
+def encFour : Enc Size := encDouble encTwo

@@ -1,0 +1,48 @@
+-- Glue types and univalence (S3b, rulings R4, R5, R9): ua lines on Fin 11
+-- and Fin 3, uaBeta by refl at closed values, the six loops at Fin 3 (one
+-- for each permutation), and the face rules of glue and unglue.
+def plus3 : (r : Fin 11) -> Fin 11 := fun (r : Fin 11) => finAdd 11 r 3
+def minus3 : (r : Fin 11) -> Fin 11 := fun (r : Fin 11) => finAdd 11 r 8
+-- A path in Type 0 with the end Fin n is a JSON transport table. The
+-- equivalence is inline: a top-level Equiv is a pair with a function.
+def uaPlus3 : Path (Type 0) (Fin 11) (Fin 11) :=
+  ua (Fin 11) (Fin 11) (isoToEquiv (Fin 11) (Fin 11) plus3 minus3
+    (fun (k : Fin 11) => refl) (fun (k : Fin 11) => refl))
+def uaBetaPlus3 : Path (Fin 11) (transport (Fin 11) (Fin 11) uaPlus3 9) 1 := refl
+-- The six loops at Fin 3: the rotations r + c and the reflections c - r.
+def loopId : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 r 0)
+    (fun (r : Fin 3) => finAdd 3 r 0) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+def loopRot1 : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 r 1)
+    (fun (r : Fin 3) => finAdd 3 r 2) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+def loopRot2 : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 r 2)
+    (fun (r : Fin 3) => finAdd 3 r 1) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+def loopRef0 : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 0 (finNeg 3 r))
+    (fun (r : Fin 3) => finAdd 3 0 (finNeg 3 r)) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+def loopRef1 : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 1 (finNeg 3 r))
+    (fun (r : Fin 3) => finAdd 3 1 (finNeg 3 r)) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+def loopRef2 : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 2 (finNeg 3 r))
+    (fun (r : Fin 3) => finAdd 3 2 (finNeg 3 r)) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+-- gRot x is a path over loopRot1 from x to x + 1: at i0 the glue is its
+-- branch x, at i1 its branch x + 1, and between them the base is x + 1.
+def gRot : (x : Fin 3) -> PathP (fun (i : I) => loopRot1 @ i) x (finAdd 3 x 1) :=
+  fun (x : Fin 3) => fun (i : I) => glue (fun (_ : I) => [ ~i -> x, i -> finAdd 3 x 1 ]) (finAdd 3 x 1)
+-- A glue at a true face is its branch (2), not its base (0).
+def glueFace : Path (Fin 3) (gRot 2 @ i0) 2 := refl
+-- At the neutral face i, unglue of a glue is its base (0), not a branch (2).
+-- At i0 unglue is witness e of the branch: 2 + 1 = 0.
+def unglueGlue : PathP (fun (i : I) => Path (Fin 3) (unglue (gRot 2 @ i)) 0) refl refl :=
+  fun (i : I) => refl
+-- A Glue line with no branch over the line loopRot1. Its base changes
+-- along i, so transp at Glue must do the comp in the base: 0 goes to 1,
+-- not to the raw base 0.
+def glueOverLoop : Path (Fin 3)
+    (unglue (transp (fun (i : I) => Glue (loopRot1 @ i) i0 (fun (_ : I) => [ ])) i0 (glue (fun (_ : I) => [ ]) 0))) 1 := refl
+-- Values for langc eval.
+def uaAt9 : Fin 11 := transport (Fin 11) (Fin 11) uaPlus3 9
+def rotTwice : Fin 3 := transport (Fin 3) (Fin 3) loopRot1 (transport (Fin 3) (Fin 3) loopRot1 0)

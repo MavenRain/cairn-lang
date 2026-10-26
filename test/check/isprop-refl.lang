@@ -1,0 +1,3 @@
+-- isProp is an ordinary type: a hypothesis of isProp does not make two
+-- elements convertible, so refl does not relate them.
+def bad : isProp (Trunc1 Nat) -> Path (Trunc1 Nat) (trunc1 Nat 0) (trunc1 Nat 1) := fun (h : isProp (Trunc1 Nat)) => refl

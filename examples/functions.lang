@@ -7,4 +7,4 @@ def four : Nat := twice next 2
 def pairOf : (x y : Nat) -> Prod Nat Nat := fun (x y : Nat) => pair x y
 def poly : (A : Type 0) -> (x : A) -> A := fun (A : Type 0) (x : A) => x
 def three : Nat := poly Nat 3
-def applied : Nat := (fun (n : Nat) => natMul n n) 6
+def applied : Nat := (fun (n : Nat) => natAdd n n) 6

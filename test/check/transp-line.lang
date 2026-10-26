@@ -1,0 +1,2 @@
+def bad : (X : Type 0) -> (Y : Type 0) -> (p : Path (Type 0) X Y) -> (a : X) -> Y :=
+  fun (X : Type 0) => fun (Y : Type 0) => fun (p : Path (Type 0) X Y) => fun (a : X) => transp (fun (i : I) => p @ i) i1 a

@@ -1,0 +1,31 @@
+-- A private cast contract (slice S8 B3a, docs/PLAN.md section 8): the ring (p0, p1) of examples/zk.lang at poll 0.
+-- The entry cast takes the calldata words choice, c_1, s_1, s_2, I.x, I.y (O28) and passes them to zkVerify. The ring is
+-- closed and the words are open, so the evaluator unrolls the verify to ecAdd, ecMul, hash, u256Le and u256Eq (front/eval.c
+-- zk_unroll) and `langc build` emits 6n precompile calls. The nullifier key is hash (hash I.x I.y) poll (ruling Q4).
+def g : Prod U256 U256 := pair 1u 2u
+def k0 : U256 := zkKey 0
+def k1 : U256 := zkKey 1
+def p0 : Prod U256 U256 := ecMul g k0
+def p1 : Prod U256 U256 := ecMul g k1
+def ring : List (Prod U256 U256) := cons p0 (cons p1 nil)
+def poll : U256 := 0u
+
+state State := makeState (used : Map U256 Flag) (tally : Map U256 U256)
+def init : State := makeState mapEmpty mapEmpty
+
+-- Entry: a used key image reverts, a failed verify reverts, else the key image is recorded and the choice counted.
+def cast : (env : Env) -> (s : State) -> (choice c1 s1 s2 ix iy : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (choice c1 s1 s2 ix iy : U256) =>
+    flagIf (mapGet (used s) (hash (hash ix iy) poll))
+      none
+      (flagIf (zkVerify ring poll choice (cons c1 (cons s1 (cons s2 (cons ix (cons iy nil))))))
+        (some (pair (makeState (mapSet (used s) (hash (hash ix iy) poll) flagYes)
+          (mapSet (tally s) choice (u256Add (mapGet (tally s) choice) 1u))) nil))
+        none)
+
+-- View: the count of a choice.
+def count : (env : Env) -> (s : State) -> (choice : U256) -> U256 :=
+  fun (env : Env) (s : State) (choice : U256) => mapGet (tally s) choice
+
+-- The host path: the cast of member 0 for choice 1 verifies in the evaluator.
+def ok : Flag := zkVerify ring poll 1u (zkSign ring k0 poll 1u)

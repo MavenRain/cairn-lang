@@ -1,0 +1,2 @@
+-- No irrelevant binder marker: the parser has no dot prefix.
+def f : (.(x : Nat)) -> Nat := fun (x : Nat) => x

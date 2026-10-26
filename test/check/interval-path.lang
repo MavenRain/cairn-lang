@@ -1,0 +1,1 @@
+def bad : Path I i0 i0 := refl

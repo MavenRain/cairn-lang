@@ -1,1 +1,1 @@
-def loop : (n : Nat) -> Nat := fun (n : Nat) => loop n
+def spin : (n : Nat) -> Nat := fun (n : Nat) => spin n

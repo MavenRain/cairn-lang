@@ -1,0 +1,3 @@
+-- REFUSE_LAW (rule O7, leak L1): a guest fold on the sealed family Enc is
+-- decrypt, and the codomain Size is not a law.
+def sealLeak : Enc Size -> Size := fun (c : Enc Size) => fold (fun (a : Size) => a) c

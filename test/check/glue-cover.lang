@@ -1,0 +1,4 @@
+-- The face of Glue is i \/ ~i, but the system has only the key i. The
+-- face ~i has no branch, so the system does not cover the face.
+def bad : Path (Type 0) (Fin 3) (Fin 3) :=
+  fun (i : I) => Glue (Fin 3) (i \/ ~i) (fun (_ : I) => [ i -> pack (Fin 3) (idEquiv (Fin 3)) ])

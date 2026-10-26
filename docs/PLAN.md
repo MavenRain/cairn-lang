@@ -11,7 +11,9 @@ questions. Section 11 lists the questions for the USER. A reading that is
 not ruled stays a recommendation.
 
 Status: S0 DONE (seed e222eba). S1 DONE: the USER took each
-recommendation of section 11 (section 1). Next: S2 (port the kernel).
+recommendation of section 11 (section 1). S2 DONE: the intent-lang kernel
+at 67445ae is ported, without the EVM writer and the swap (section 9).
+Next: S3 (no time).
 
 ## 1. Rulings
 
@@ -290,8 +292,8 @@ mutant of it, as in intent-lang.
 |---|---|---|
 | S0 | Seed from tcc-wasm, DESIGN.md verbatim, this plan, README; gate; seed commit; private repo | DONE e222eba |
 | S1 | The USER rules section 11. Record the rulings here. | DONE (all (a)) |
-| S2 | Port the intent-lang kernel at 67445ae (6.1). Survey first: SAME, CHANGED, INTENT-ONLY. Targets = the intent-lang counts less the EVM and swap rows. | NEXT |
-| S3 | No time: remove the clock parts (4), add `REFUSE_TIME`, `Pos` and `len`. | |
+| S2 | Port the intent-lang kernel at 67445ae (6.1). Survey first: SAME, CHANGED, INTENT-ONLY. Targets = the intent-lang counts less the EVM and swap rows. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 189, kit-only refusals 24, evals 215, proves 2, build refusals 1 (new), guest differential 28, runs 7, run refusals 11, 11 tool regressions passed. Each count is at its target (`cairn-lang-work/S2-survey.md`). |
+| S3 | No time: remove the clock parts (4), add `REFUSE_TIME`, `Pos` and `len`. | NEXT |
 | S4 | The group and the hash (Q-S0-2 (a), Q-S0-3 (a)): a group interface `group.h` for the Sigma, ElGamal, threshold and bLSAG code; the secp256k1 field and group; SHA-256 (FIPS 180-4 vectors); remove `bn254.c`. | |
 | S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | |
 | S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | |
@@ -332,6 +334,28 @@ mutant of it, as in intent-lang.
   `docs/MCP.md` at S13.
 - O10 The `fix` of each refusal code (A2) is one concrete edit. A code
   with no edit gives `fix: null` and a reason.
+- O11 (S2) `test/ballottool.c` keeps the swap vectors of intent-lang
+  (`fill_intent`: `intentHash`, `replayKey`, `cipherDigest`; its comments
+  name `intent.lang` and `intentsig.lang`, which S2 removed). S2 did not
+  edit the tool. S4 rebuilds the tool on `group.h` and SHA-256, and removes
+  the swap vectors then.
+- O12 (S2) The seed example `examples/inventory.lang` uses the seed sample
+  domain (`Color`, `Item`, `Stack`, `Lot`). Only `domain/domain.lang` can
+  declare a family, so the example cannot check under the ported domain.
+  S2 moved it, byte for byte, to `examples/seed/inventory.lang`, out of the
+  `examples/*.lang` rows. `domain/README.md` still describes the seed
+  domain. S5 writes a Part R example and the domain README, and removes
+  both seed files.
+- O13 (S2) Out of the build until S8: `src/front/lower.c`,
+  `src/front/lower.h`, `src/wasm.c`, `src/ir.h` (the e222eba copy),
+  `test/ir/*.lang` (5 rows), `test/run-wasm.mjs`, `test/grid.awk` and the
+  kit row `test/check/domain-name.lang` (no expect line). S8 puts each back
+  in the gate or removes it.
+- O14 (S2) `langc build` and `langc abi` refuse with `REFUSE_LOWER`
+  ("target pending S8"). Only `build` has a gate row. `-o`, `--runtime` and
+  `abi --text` still parse, and the `Options` fields `out_path`, `runtime`
+  and `json` have no use until S8. `langc contract` lived in the removed
+  `src/front/writer.c`, so it is now an unknown command (exit 2).
 
 ## 11. Questions for the USER (S0)
 

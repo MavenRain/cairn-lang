@@ -1,0 +1,2 @@
+-- A Fin literal must be below the bound: 3 is not a value of Fin 3.
+def bad : Fin 3 := 3

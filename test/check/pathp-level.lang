@@ -1,0 +1,1 @@
+def bad : Type 0 := PathP (fun (i : I) => Type 0) Nat Nat

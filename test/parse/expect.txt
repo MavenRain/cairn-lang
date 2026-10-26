@@ -7,3 +7,13 @@ no-keyword.lang PARSE_EXPECT
 fun-no-binder.lang PARSE_EXPECT
 type-no-level.lang PARSE_EXPECT
 deep.lang PARSE_DEPTH
+addr-digits.lang LEX_HEX
+hex-digits.lang LEX_HEX
+u256-range.lang LEX_U256_RANGE
+state-no-ctor.lang PARSE_EXPECT
+dangling-at.lang PARSE_EXPECT
+system-top.lang PARSE_EXPECT
+irrelevant-dot.lang LEX_CHAR
+irrelevant-brace.lang LEX_CHAR
+irrelevant-at.lang PARSE_EXPECT
+irrelevant-attr.lang LEX_CHAR

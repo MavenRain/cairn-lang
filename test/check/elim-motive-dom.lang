@@ -1,0 +1,2 @@
+-- elim refuses a motive on the wrong type: the scrutinee is a Unit, so the motive must have the type Unit -> Type k, but this motive is on Sum Unit Unit.
+def bad : Unit -> Unit := fun (u : Unit) => elim (fun (t : Sum Unit Unit) => Unit) unit u

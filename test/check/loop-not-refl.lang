@@ -1,0 +1,4 @@
+-- The loop is not refl: a path constructor value is not equal to its
+-- boundary point, so this refl does not check.
+def loopPath : Path S1 base base := fun (i : I) => loop i
+def bad : Path (Path S1 base base) loopPath refl := refl

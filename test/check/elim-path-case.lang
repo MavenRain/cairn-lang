@@ -1,0 +1,9 @@
+-- elim refuses a path case with the wrong ends (S7 B1): the parityEq case must be a path from the parityOf case at a to the parityOf case at b, both trunc0 Size sz0, but this path is constant at trunc0 Size (szS sz0).
+def bad : Parity -> Trunc0 Size :=
+  fun (z : Parity) => elim (fun (w : Parity) => Trunc0 Size)
+    (fun (a : Size) => trunc0 Size sz0)
+    (fun (a : Size) (b : Size) (r : Path Size (sizeEven a) (sizeEven b)) => fun (i : I) => trunc0 Size (szS sz0))
+    (fun (x : Parity) (ihx : Trunc0 Size) (y : Parity) (ihy : Trunc0 Size)
+      (p : Path Parity x y) (ihp : Path (Trunc0 Size) ihx ihy)
+      (q : Path Parity x y) (ihq : Path (Trunc0 Size) ihx ihy) =>
+      fun (i : I) => fun (j : I) => squash0 Size ihx ihy ihp ihq i j) z

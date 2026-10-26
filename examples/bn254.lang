@@ -1,0 +1,29 @@
+-- Host ecAdd and ecMul on BN254 G1 (slice S8 B1): a closed curve op computes in the evaluator (front/bn254.c).
+-- k G for k in 1, 2, 3, r minus 1 and r; test/precompile.sh gives the same words from go-ethereum for k = 2, 3, r minus 1 and r.
+-- A coordinate at or above p, or a point not on the curve, traps (R14: the host reading of the 0x06 and 0x07 revert, R18).
+
+def p : U256 := 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47u
+def pMinusTwo : U256 := 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd45u
+def pPlusTwo : U256 := 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd49u
+def r : U256 := 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001u
+def rMinusOne : U256 := 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000000u
+
+def oneG : Prod U256 U256 := ecMul (pair 1u 2u) 1u
+def twoG : Prod U256 U256 := ecMul (pair 1u 2u) 2u
+def threeG : Prod U256 U256 := ecMul (pair 1u 2u) 3u
+def rMinusOneG : Prod U256 U256 := ecMul (pair 1u 2u) rMinusOne
+
+-- r is the order of G1, so r G is the point at infinity, (0, 0).
+def rG : Prod U256 U256 := ecMul (pair 1u 2u) r
+
+-- (1, p minus 2) is the negation of G, so the sum is the point at infinity.
+def negSum : Prod U256 U256 := ecAdd (pair 1u 2u) (pair 1u pMinusTwo)
+
+-- Each trap row is an entry (Nat -> Flag, as eqTrap in words.lang), so `langc eval` gives the EVAL_OVERFLOW line.
+-- (1, 1) is not on the curve.
+def addBad : Nat -> Flag := fun (n : Nat) => u256Eq (first (ecAdd (pair 1u 1u) (pair 1u (toU256 n)))) 0u
+def mulBad : Nat -> Flag := fun (n : Nat) => u256Eq (first (ecMul (pair 1u 1u) (toU256 n))) 0u
+
+-- A coordinate p traps. p + 2 is 2 modulo p, so (1, p + 2) is G after a reduction: it traps all the same.
+def coordP : Nat -> Flag := fun (n : Nat) => u256Eq (first (ecAdd (pair p 2u) (pair 1u (toU256 n)))) 0u
+def coordBig : Nat -> Flag := fun (n : Nat) => u256Eq (first (ecMul (pair 1u pPlusTwo) (toU256 n))) 0u

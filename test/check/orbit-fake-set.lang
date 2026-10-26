@@ -1,0 +1,12 @@
+-- The orbitSquash case of an Orbit fold must be an isSet proof of the target. The square fun x y p q i j => x does not have the ends p and q, so it is refused.
+def Member : Type 0 := Sum Unit Unit
+def Choice : Type 0 := Sum Unit Unit
+def Outcome : Type 0 := Choice
+def Group : Type 0 := Sum Unit Unit
+def flip : Choice -> Choice := fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+def act : Group -> (Member -> Choice) -> Member -> Choice :=
+  fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => flip (f m)) g
+def bad : Orbit -> Choice :=
+  fun (z : Orbit) => fold (fun (c : Member -> Choice) => inl unit)
+    (fun (a : Member -> Choice) (b : Member -> Choice) (r : Sigma (g : Group) (Path (Member -> Choice) (act g b) a)) => fun (i : I) => inl unit)
+    (fun (x : Choice) (y : Choice) (p : Path Choice x y) (q : Path Choice x y) => fun (i : I) => fun (j : I) => x) z

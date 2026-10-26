@@ -1,0 +1,4 @@
+-- Under idEquiv, unglue of the branch 0 is 0, but the base of glue is 1.
+-- The branch and the base do not agree where the key holds.
+def bad : PathP (fun (i : I) => Glue (Fin 3) (~i \/ i) (fun (_ : I) => [ ~i -> pack (Fin 3) (idEquiv (Fin 3)), i -> pack (Fin 3) (idEquiv (Fin 3)) ])) 0 0 :=
+  fun (i : I) => glue (fun (_ : I) => [ ~i -> 0, i -> 0 ]) 1

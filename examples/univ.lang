@@ -1,0 +1,42 @@
+-- hcomp at Glue and in the universe, and uaArrow (S3c, rulings R6, R7,
+-- Q-S3c-1 (a), Q-S3c-2 (a)): the composite of two loopRot1 lines by an
+-- inline hcomp in Type 0, an hcomp in loopRot1 @ j by refl, and a uaArrow
+-- line of functions over ua plus3 on Fin 11.
+def loopRot1 : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 r 1)
+    (fun (r : Fin 3) => finAdd 3 r 2) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+-- loopRot1 then loopRot1. The domain trans takes A : Type 0, so the
+-- composite in Type 0 is the inline hcomp form. Its JSON table is the
+-- table of loopRot2: 0 goes to 2, 1 to 0, 2 to 1.
+def transTwoLoops : Path (Type 0) (Fin 3) (Fin 3) :=
+  fun (j : I) => hcomp (Type 0) (~j \/ j) (fun (i : I) => [ ~j -> Fin 3, j -> loopRot1 @ i ]) (loopRot1 @ j)
+def transTwo0 : Path (Fin 3) (transport (Fin 3) (Fin 3) transTwoLoops 0) 2 := refl
+def transTwo1 : Path (Fin 3) (transport (Fin 3) (Fin 3) transTwoLoops 1) 0 := refl
+def transTwo2 : Path (Fin 3) (transport (Fin 3) (Fin 3) transTwoLoops 2) 1 := refl
+-- gRot x is a path over loopRot1 from x to x + 1 (as in glue.lang).
+def gRot : (x : Fin 3) -> PathP (fun (i : I) => loopRot1 @ i) x (finAdd 3 x 1) :=
+  fun (x : Fin 3) => fun (i : I) => glue (fun (_ : I) => [ ~i -> x, i -> finAdd 3 x 1 ]) (finAdd 3 x 1)
+-- An hcomp in the Glue type loopRot1 @ j with a constant tube is its base.
+-- The T part and the A part must both give gRot x @ j. It is a Pi def
+-- (finAll checks each x), as its type holds a Glue type with no JSON form.
+-- The faces are ~j and j, so each end of the line is a true face at a
+-- neutral x.
+def hcompGlue : (x : Fin 3) -> PathP (fun (j : I) => Path (loopRot1 @ j)
+    (hcomp (loopRot1 @ j) (~j \/ j) (fun (i : I) => [ ~j -> gRot x @ j, j -> gRot x @ j ]) (gRot x @ j)) (gRot x @ j)) refl refl :=
+  fun (x : Fin 3) => fun (j : I) => refl
+def plus3 : (r : Fin 11) -> Fin 11 := fun (r : Fin 11) => finAdd 11 r 3
+def minus3 : (r : Fin 11) -> Fin 11 := fun (r : Fin 11) => finAdd 11 r 8
+-- uaArrow on Fin 11: a function f on the end i1 and f after plus3 on the
+-- end i0 make a path of functions over ua plus3. It is a Pi def, so it is
+-- not a JSON instance (a path of functions has no JSON form).
+def uaArrowPlus3 : (f : Fin 11 -> Fin 11) ->
+  PathP (fun (i : I) => (ua (Fin 11) (Fin 11) (isoToEquiv (Fin 11) (Fin 11) plus3 minus3
+    (fun (k : Fin 11) => refl) (fun (k : Fin 11) => refl)) @ i) -> Fin 11) (fun (a : Fin 11) => f (plus3 a)) f :=
+  fun (f : Fin 11 -> Fin 11) => uaArrow (Fin 11) (Fin 11) (Fin 11) (isoToEquiv (Fin 11) (Fin 11) plus3 minus3
+    (fun (k : Fin 11) => refl) (fun (k : Fin 11) => refl)) (fun (a : Fin 11) => f (plus3 a)) f (fun (a : Fin 11) => refl)
+-- At i0 the line is f after plus3: 9 goes to 9 + 3 = 1, then 1 + 1 = 2.
+def uaArrowEnd0 : Path (Fin 11) ((uaArrowPlus3 (fun (b : Fin 11) => finAdd 11 b 1) @ i0) 9) 2 := refl
+-- At i1 the line is f: 9 goes to 9 + 1 = 10.
+def uaArrowEnd1 : Path (Fin 11) ((uaArrowPlus3 (fun (b : Fin 11) => finAdd 11 b 1) @ i1) 9) 10 := refl
+-- A value for langc eval.
+def transTwo : Fin 3 := transport (Fin 3) (Fin 3) transTwoLoops 1

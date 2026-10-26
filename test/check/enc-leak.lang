@@ -1,0 +1,5 @@
+-- REFUSE_LAW (rule O7, leak L2): leakLaw uses decrypt in its type and has a
+-- Path codomain, so it is a law-only def and is accepted. leak takes its end
+-- point at i0, which computes decrypt; it uses leakLaw with the codomain Size.
+def leakLaw : (c : Enc Size) -> Path Size (decrypt Size c) (decrypt Size c) := fun (c : Enc Size) => refl
+def leak : Enc Size -> Size := fun (c : Enc Size) => leakLaw c @ i0

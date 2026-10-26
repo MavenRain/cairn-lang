@@ -1,0 +1,7 @@
+-- loopRot1 is not ua of idEquiv: transport along loopRot1 moves 0 to 1.
+-- Both are Glue lines with the base Fin 3, but their branches differ, and
+-- the conversion has no proof irrelevance, so refl does not prove them equal.
+def loopRot1 : Path (Type 0) (Fin 3) (Fin 3) :=
+  ua (Fin 3) (Fin 3) (isoToEquiv (Fin 3) (Fin 3) (fun (r : Fin 3) => finAdd 3 r 1)
+    (fun (r : Fin 3) => finAdd 3 r 2) (fun (k : Fin 3) => refl) (fun (k : Fin 3) => refl))
+def bad : Path (Path (Type 0) (Fin 3) (Fin 3)) loopRot1 (ua (Fin 3) (Fin 3) (idEquiv (Fin 3))) := refl

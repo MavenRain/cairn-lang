@@ -1,0 +1,2 @@
+state State := makeState (count : Nat) [ i1 -> missing ]
+def init : State := makeState 0

@@ -1,0 +1,3 @@
+-- REFUSE_STATE: Enc has no chain form in S5 (Q-S5-5 (a)), so a state field
+-- of an Enc type is refused.
+state State := makeState (held : U256) (box : Enc U256)

@@ -1,0 +1,1 @@
+def f : Prod U256 U256 -> U256 -> Prod U256 U256 := fun (a : Prod U256 U256) (k : U256) => ecMul a k

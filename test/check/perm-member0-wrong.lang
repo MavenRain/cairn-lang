@@ -1,0 +1,11 @@
+-- O26 (S10 B3): the choice of member 0 is not invariant under the member swap. permute is the member permutation of
+-- examples/dao.lang, and refl at the swap case of the permutation type is refused at the end site (PATH_END).
+def Member : Type 0 := Sum Unit Unit
+def Choice : Type 0 := Sum Unit Unit
+def MPerm : Type 0 := Sum Unit Unit
+def permute : MPerm -> Member -> Member :=
+  fun (s : MPerm) (m : Member) => either (fun (u : Unit) => m) (fun (u : Unit) => either (fun (v : Unit) => inr unit) (fun (v : Unit) => inl unit) m) s
+def member0 : (Member -> Choice) -> Choice := fun (c : Member -> Choice) => c (inl unit)
+def member0Perm : (s : MPerm) -> (c : Member -> Choice) -> Path Choice (member0 (fun (m : Member) => c (permute s m))) (member0 c) :=
+  fun (s : MPerm) (c : Member -> Choice) => elim (fun (t : MPerm) => Path Choice (member0 (fun (m : Member) => c (permute t m))) (member0 c))
+    (fun (u : Unit) => refl) (fun (u : Unit) => refl) s

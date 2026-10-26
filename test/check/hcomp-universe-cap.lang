@@ -1,0 +1,1 @@
+def bad : Path (Type 0) Nat Nat := fun (j : I) => hcomp (Type 0) (~j) (fun (i : I) => [ ~j -> Fin 3 ]) Nat

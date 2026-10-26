@@ -1,0 +1,2 @@
+-- SProp is a reserved name (rule R4): no declaration can take it.
+def SProp : Type 1 := Type 0

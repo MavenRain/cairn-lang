@@ -1,0 +1,2 @@
+-- ua takes an equivalence: a map alone is not a term of Equiv A A.
+def bad : (A : Type 0) -> Path (Type 0) A A := fun (A : Type 0) => ua A A (fun (x : A) => x)

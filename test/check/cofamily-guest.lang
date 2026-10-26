@@ -1,0 +1,2 @@
+-- REFUSE_DATA: only the domain file can declare a cofamily (rule R1).
+cofamily Strm (A : Type 0) := strmCorec (strmHead : A) (strmTail : Strm A)

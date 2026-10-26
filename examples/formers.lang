@@ -1,4 +1,4 @@
--- Formers F1 to F4: products, sums, options and lists.
+-- Formers F1 to F4: products, sums, options and lists (FreeMon since S3).
 def price : Nat := 1200
 def both : Prod Nat Flag := pair price flagYes
 def left : Nat := first both
@@ -10,5 +10,5 @@ def picked : Nat := either size count choice
 def nothing : Option Nat := none
 def something : Option Nat := some 7
 def orZero : (o : Option Nat) -> Nat := fun (o : Option Nat) => option 0 (fun (n : Nat) => n) o
-def xs : List Nat := cons 1 (cons 2 (cons 3 nil))
-def empty : List Nat := nil
+def xs : FreeMon Nat := fmCons Nat 1 (fmCons Nat 2 (fmCons Nat 3 (fmUnit Nat)))
+def empty : FreeMon Nat := fmUnit Nat

@@ -1,0 +1,2 @@
+-- No Prop-like types (O17): Prop is not a name, also as the base of Glue.
+def bad : Type 1 := Glue Prop i0 (fun (_ : I) => [ ])

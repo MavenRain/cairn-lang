@@ -1,0 +1,91 @@
+-- Higher inductive types with a parameter (S6, O20; S3 design C
+-- section 3): Bag A is the free commutative monoid on A, and bagSwap is
+-- one path by bagComm. A constructor takes the parameter A, then its
+-- fields. The elements are Size values, as Nat is internal.
+def sizeOne : Size := szS sz0
+def bagOne : Bag Size := bagOf Size sizeOne
+def bagTwo : Bag Size := bagOp Size (bagOf Size sz0) bagOne
+def bagSwapped : Bag Size := bagOp Size bagOne (bagOf Size sz0)
+def bagSwap : Path (Bag Size) bagTwo bagSwapped :=
+  fun (i : I) => bagComm Size (bagOf Size sz0) bagOne i
+-- succ0 maps szS over Trunc0 Size, as map0 in quot.lang.
+def succ0 : Trunc0 Size -> Trunc0 Size :=
+  fun (t : Trunc0 Size) => fold (fun (s : Size) => trunc0 Size (szS s))
+    (fun (x : Trunc0 Size) (y : Trunc0 Size) (p : Path (Trunc0 Size) x y) (q : Path (Trunc0 Size) x y) => fun (i : I) => fun (j : I) => squash0 Size x y p q i j) t
+-- The size sum (S3, design C section 3): sizeAdd recurses on the first
+-- size, so sizeAdd sz0 m is m by computation. Its laws are by elim on Size.
+def sizeAdd : Size -> Size -> Size :=
+  fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
+def addZeroR : (n : Size) -> Path Size (sizeAdd n sz0) n :=
+  fun (n : Size) => elim (fun (t : Size) => Path Size (sizeAdd t sz0) t) refl
+    (fun (k : Size) (ih : Path Size (sizeAdd k sz0) k) => fun (i : I) => szS (ih @ i)) n
+def addSuccR : (n : Size) -> (m : Size) -> Path Size (sizeAdd n (szS m)) (szS (sizeAdd n m)) :=
+  fun (n : Size) (m : Size) => elim (fun (t : Size) => Path Size (sizeAdd t (szS m)) (szS (sizeAdd t m))) refl
+    (fun (k : Size) (ih : Path Size (sizeAdd k (szS m)) (szS (sizeAdd k m))) => fun (i : I) => szS (ih @ i)) n
+def addComm : (n : Size) -> (m : Size) -> Path Size (sizeAdd n m) (sizeAdd m n) :=
+  fun (n : Size) (m : Size) => elim (fun (t : Size) => Path Size (sizeAdd t m) (sizeAdd m t))
+    (fun (i : I) => addZeroR m @ (~i))
+    (fun (k : Size) (ih : Path Size (sizeAdd k m) (sizeAdd m k)) =>
+      trans Size (szS (sizeAdd k m)) (szS (sizeAdd m k)) (sizeAdd m (szS k))
+        (fun (i : I) => szS (ih @ i)) (fun (i : I) => addSuccR m k @ (~i))) n
+def addAssoc : (n : Size) -> (m : Size) -> (o : Size) -> Path Size (sizeAdd (sizeAdd n m) o) (sizeAdd n (sizeAdd m o)) :=
+  fun (n : Size) (m : Size) (o : Size) => elim (fun (t : Size) => Path Size (sizeAdd (sizeAdd t m) o) (sizeAdd t (sizeAdd m o))) refl
+    (fun (k : Size) (ih : Path Size (sizeAdd (sizeAdd k m) o) (sizeAdd k (sizeAdd m o))) => fun (i : I) => szS (ih @ i)) n
+-- add0 lifts sizeAdd to Trunc0 Size, as succ0 lifts szS.
+def add0 : Trunc0 Size -> Trunc0 Size -> Trunc0 Size :=
+  fun (x : Trunc0 Size) (y : Trunc0 Size) => fold (fun (s : Size) => fold (fun (t : Size) => trunc0 Size (sizeAdd s t))
+      (fun (a : Trunc0 Size) (b : Trunc0 Size) (p : Path (Trunc0 Size) a b) (q : Path (Trunc0 Size) a b) => fun (i : I) => fun (j : I) => squash0 Size a b p q i j) y)
+    (fun (a : Trunc0 Size) (b : Trunc0 Size) (p : Path (Trunc0 Size) a b) (q : Path (Trunc0 Size) a b) => fun (i : I) => fun (j : I) => squash0 Size a b p q i j) x
+def isSetT0 : isSet (Trunc0 Size) :=
+  fun (a : Trunc0 Size) (b : Trunc0 Size) (p : Path (Trunc0 Size) a b) (q : Path (Trunc0 Size) a b) => fun (i : I) => fun (j : I) => squash0 Size a b p q i j
+-- A family of propositions over a square has each PathP square (copied from bagorbit.lang).
+def propSquare : (X : Type 0) -> (P : X -> Type 0) -> ((x : X) -> isProp (P x)) -> (x : X) -> (y : X) -> (p : Path X x y) -> (q : Path X x y) -> (s : Path (Path X x y) p q) ->
+  (ihx : P x) -> (ihy : P y) -> (ihp : PathP (fun (j : I) => P (p @ j)) ihx ihy) -> (ihq : PathP (fun (j : I) => P (q @ j)) ihx ihy) ->
+  PathP (fun (i : I) => PathP (fun (j : I) => P ((s @ i) @ j)) ihx ihy) ihp ihq :=
+  fun (X : Type 0) (P : X -> Type 0) (hP : (x : X) -> isProp (P x)) (x : X) (y : X) (p : Path X x y) (q : Path X x y) (s : Path (Path X x y) p q)
+    (ihx : P x) (ihy : P y) (ihp : PathP (fun (j : I) => P (p @ j)) ihx ihy) (ihq : PathP (fun (j : I) => P (q @ j)) ihx ihy) =>
+    fun (i : I) => fun (j : I) => hcomp (P ((s @ i) @ j)) (~i \/ i \/ ~j \/ j) (fun (k : I) => [
+      ~i -> hP ((s @ i) @ j) (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx) (ihp @ j) @ k,
+      i -> hP ((s @ i) @ j) (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx) (ihq @ j) @ k,
+      ~j -> hP ((s @ i) @ j) (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx) ihx @ k,
+      j -> hP ((s @ i) @ j) (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx) ihy @ k ])
+      (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx)
+-- Two maps from Trunc0 Size into a set agree when they agree at each
+-- trunc0 s (the orbitNExt shape of bagorbit.lang).
+def truncExt : (T : Type 0) -> isSet T -> (L : Trunc0 Size -> T) -> (M : Trunc0 Size -> T) ->
+  ((s : Size) -> Path T (L (trunc0 Size s)) (M (trunc0 Size s))) -> (x : Trunc0 Size) -> Path T (L x) (M x) :=
+  fun (T : Type 0) (sT : isSet T) (L : Trunc0 Size -> T) (M : Trunc0 Size -> T)
+    (h : (s : Size) -> Path T (L (trunc0 Size s)) (M (trunc0 Size s))) (x : Trunc0 Size) =>
+    elim (fun (z : Trunc0 Size) => Path T (L z) (M z)) (fun (s : Size) => h s)
+      (fun (w : Trunc0 Size) (ihw : Path T (L w) (M w)) (y : Trunc0 Size) (ihy : Path T (L y) (M y))
+        (p : Path (Trunc0 Size) w y) (ihp : PathP (fun (j : I) => Path T (L (p @ j)) (M (p @ j))) ihw ihy)
+        (q : Path (Trunc0 Size) w y) (ihq : PathP (fun (j : I) => Path T (L (q @ j)) (M (q @ j))) ihw ihy) =>
+        fun (i : I) => fun (j : I) => (propSquare (Trunc0 Size) (fun (z : Trunc0 Size) => Path T (L z) (M z))
+          (fun (z : Trunc0 Size) => sT (L z) (M z)) w y p q (fun (a : I) => fun (b : I) => squash0 Size w y p q a b) ihw ihy ihp ihq @ i) @ j) x
+-- The monoid laws of add0: truncExt down to trunc0, then the laws of sizeAdd.
+def add0UnitL : (x : Trunc0 Size) -> Path (Trunc0 Size) (add0 (trunc0 Size sz0) x) x :=
+  truncExt (Trunc0 Size) isSetT0 (fun (a : Trunc0 Size) => add0 (trunc0 Size sz0) a) (fun (a : Trunc0 Size) => a) (fun (s : Size) => refl)
+def add0Comm : (x : Trunc0 Size) -> (y : Trunc0 Size) -> Path (Trunc0 Size) (add0 x y) (add0 y x) :=
+  fun (x : Trunc0 Size) (y : Trunc0 Size) =>
+    truncExt (Trunc0 Size) isSetT0 (fun (a : Trunc0 Size) => add0 a y) (fun (a : Trunc0 Size) => add0 y a)
+      (fun (s : Size) => truncExt (Trunc0 Size) isSetT0 (fun (b : Trunc0 Size) => add0 (trunc0 Size s) b) (fun (b : Trunc0 Size) => add0 b (trunc0 Size s))
+        (fun (t : Size) => fun (i : I) => trunc0 Size (addComm s t @ i)) y) x
+def add0Assoc : (x : Trunc0 Size) -> (y : Trunc0 Size) -> (z : Trunc0 Size) -> Path (Trunc0 Size) (add0 (add0 x y) z) (add0 x (add0 y z)) :=
+  fun (x : Trunc0 Size) (y : Trunc0 Size) (z : Trunc0 Size) =>
+    truncExt (Trunc0 Size) isSetT0 (fun (a : Trunc0 Size) => add0 (add0 a y) z) (fun (a : Trunc0 Size) => add0 a (add0 y z))
+      (fun (s : Size) => truncExt (Trunc0 Size) isSetT0 (fun (b : Trunc0 Size) => add0 (add0 (trunc0 Size s) b) z) (fun (b : Trunc0 Size) => add0 (trunc0 Size s) (add0 b z))
+        (fun (t : Size) => truncExt (Trunc0 Size) isSetT0 (fun (c : Trunc0 Size) => add0 (add0 (trunc0 Size s) (trunc0 Size t)) c) (fun (c : Trunc0 Size) => add0 (trunc0 Size s) (add0 (trunc0 Size t) c))
+          (fun (u : Size) => fun (i : I) => trunc0 Size (addAssoc s t u @ i)) z) y) x
+-- The size count (S6 B3; S3): a fold over Bag into the set Trunc0 Size.
+-- A case takes the fields, and a recursive field arrives folded. A
+-- generator counts one, the unit zero, and bagOp adds by add0. The path
+-- cases are the laws of add0, and the bagSquash case is squash0.
+def bagCount : Bag Size -> Trunc0 Size :=
+  fun (b : Bag Size) => fold (fun (h : Size) => trunc0 Size sizeOne) (trunc0 Size sz0)
+    (fun (l : Trunc0 Size) (r : Trunc0 Size) => add0 l r)
+    (fun (x : Trunc0 Size) (y : Trunc0 Size) (z : Trunc0 Size) => fun (i : I) => add0Assoc x y z @ i)
+    (fun (x : Trunc0 Size) (y : Trunc0 Size) => fun (i : I) => add0Comm x y @ i)
+    (fun (x : Trunc0 Size) => fun (i : I) => add0UnitL x @ i)
+    (fun (x : Trunc0 Size) (y : Trunc0 Size) (p : Path (Trunc0 Size) x y) (q : Path (Trunc0 Size) x y) => fun (i : I) => fun (j : I) => squash0 Size x y p q i j) b
+def bagTwoCount : Trunc0 Size := bagCount bagTwo
+def bagSwapCount : Trunc0 Size := bagCount (bagSwap @ i1)

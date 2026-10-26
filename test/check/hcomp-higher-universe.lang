@@ -1,0 +1,1 @@
+def bad : Type 1 := hcomp (Type 1) i0 (fun (_ : I) => []) (Type 0)

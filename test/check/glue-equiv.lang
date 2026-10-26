@@ -1,0 +1,4 @@
+-- A branch of Glue is pack T e with e : Equiv T A. Here e is a plain
+-- function: it has no isEquiv part, so the branch is refused.
+def bad : Path (Type 0) (Fin 3) (Fin 3) :=
+  fun (i : I) => Glue (Fin 3) (~i \/ i) (fun (_ : I) => [ ~i -> pack (Fin 3) (fun (x : Fin 3) => x), i -> pack (Fin 3) (idEquiv (Fin 3)) ])
