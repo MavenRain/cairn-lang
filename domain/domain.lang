@@ -126,6 +126,10 @@ def fmBind : (A : Type 0) -> (B : Type 0) -> (A -> FreeMon B) -> FreeMon A -> Fr
     (fun (x : FreeMon B) => fun (i : I) => fmUnitR B x i) k
 def fmMap : (A : Type 0) -> (B : Type 0) -> (A -> B) -> FreeMon A -> FreeMon B :=
   fun (A : Type 0) (B : Type 0) (f : A -> B) => fmBind A B (fun (a : A) => fmEta B (f a))
+-- The trace position (S3, USER ruling Q-S3-3 (a)): a position is an op
+-- count. `len A r` is a C builtin (OP_FM_LEN): the domain cannot prove the
+-- Nat monoid laws that fmFold needs (S3 survey section 7).
+def OpPos : Type 0 := Nat
 -- The encrypted values (S5, USER rulings Q3 (a) and Q-S5-1 .. Q-S5-3 (a),
 -- rule O7): the identity cell monad with a sealed eliminator. A guest elim,
 -- fold or projection of Enc, or a use of a law def (decrypt, observe),

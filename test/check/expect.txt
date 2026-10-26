@@ -187,3 +187,9 @@ quorum-state.lang REFUSE_STATE
 zk-leak.lang REFUSE_LAW
 transcript-state.lang REFUSE_STATE
 tally-leak.lang REFUSE_LAW
+time-block.lang REFUSE_TIME
+time-now.lang REFUSE_TIME
+time-timestamp.lang REFUSE_TIME
+time-time.lang REFUSE_TIME
+time-clock.lang REFUSE_TIME
+time-epoch.lang REFUSE_TIME

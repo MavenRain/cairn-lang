@@ -213,3 +213,6 @@ daokit enactM3 => none
 daokit windowAfter => some 4u
 daokit enactPay => some (cons (pay 0x0000000000000000000000000072656163746f72 0x0000000000000000000000000072656163746f72 4u) nil)
 daokit enactTwice => none
+oppos lenEmpty => 0
+oppos lenOne => 1
+oppos lenTwo => 2

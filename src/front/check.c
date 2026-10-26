@@ -104,6 +104,7 @@ typedef enum {
   RULE_TRANSP,
   RULE_HCOMP,
   RULE_NAT2,
+  RULE_LEN, /* S3: len A r (survey section 7) */
   RULE_U256_2,
   RULE_ADDR2,
   RULE_TO_U256,
@@ -201,6 +202,7 @@ static const Builtin BUILTINS[] = {
   {"mapSet", 3, RULE_KMAP_SET, OP_KMAP_SET, OP_KMAP, 0, VIS_INTERNAL},
   {"natDiv", 2, RULE_NAT2, OP_NAT_DIV, OP_NAT, 0, VIS_INTERNAL},
   {"natMod", 2, RULE_NAT2, OP_NAT_MOD, OP_NAT, 0, VIS_INTERNAL},
+  {"len", 2, RULE_LEN, OP_FM_LEN, OP_NAT, 0, VIS_GUEST},
   {"hash", 2, RULE_U256_2, OP_HASH, OP_U256, 0, VIS_INTERNAL},
   {"ecrecover", 4, RULE_FIXED, OP_ECRECOVER, OP_ADDR, 0, VIS_INTERNAL},
   {"ecAdd", 2, RULE_FIXED, OP_EC_ADD, OP_PROD, 0, VIS_INTERNAL},
@@ -227,6 +229,21 @@ static const Builtin BUILTINS[] = {
    ruling): no declaration can give a type the name of a Prop-like
    universe. */
 static const char *const RESERVED[] = {"Bool", "Text", "Prop", "SProp"};
+
+/* Time words (S3, O3): no declaration can take one and no name can use
+   one (REFUSE_TIME). A contract counts operations instead. */
+static const char *const TIME_WORDS[] = {"now", "block", "timestamp", "time", "clock", "epoch"};
+
+#define TIME_HINT "%s is a time word; count operations: a position is `len r` (an OpPos) and a deadline is a count of later operations"
+
+static int time_word(const char *name) {
+  size_t i;
+  for (i = 0; i < sizeof TIME_WORDS / sizeof TIME_WORDS[0]; i++) {
+    if (strcmp(TIME_WORDS[i], name) == 0)
+      return 1;
+  }
+  return 0;
+}
 
 typedef enum {
   HEAD_TERM, /* a local, a definition or another term: plain application */
@@ -428,8 +445,12 @@ static const char *show(Checker *c, const Value *v) {
 }
 
 static int push_value(Checker *c, const char *name, const Value *type, const Value *value) {
-  Scope *s = arena_alloc(c->m->arena, sizeof *s);
-  const Env *e = env_push(c->m, c->env, value);
+  Scope *s;
+  const Env *e;
+  if (name != NULL && time_word(name))
+    return FAIL(c, "REFUSE_TIME", TIME_HINT, name);
+  s = arena_alloc(c->m->arena, sizeof *s);
+  e = env_push(c->m, c->env, value);
   if (type == NULL || value == NULL || s == NULL || e == NULL)
     return c->m->diag->set ? 0 : FAIL(c, "OOM", "out of memory");
   s->name = name;
@@ -2173,6 +2194,23 @@ static const Core *rule_prim(Call *k, Op arg) {
   return k->b->arity < 2u ? op3(c, k->b->op, 0, 1, x, NULL, NULL) : op3(c, k->b->op, 0, 2, x, y, NULL);
 }
 
+static uint32_t find_family(const Machine *m, const char *name);
+
+/* len A r (S3, USER ruling Q-S3-3 (a)): the op count of the trace
+   r : FreeMon A, a Nat (an OpPos). A C builtin: the domain cannot prove
+   the Nat monoid laws that fmFold needs (S3 survey section 7). */
+static const Core *rule_len(Call *k) {
+  Checker *c = k->c;
+  uint32_t fam = find_family(c->m, "FreeMon");
+  const Core *args[2];
+  const Value *a;
+  args[0] = check(c, k->args[0], val_univ(c->m, 0));
+  a = here(c, args[0]);
+  args[1] = a == NULL || fam >= c->m->family_count ? NULL : check(c, k->args[1], val_op(c->m, VAL_OP, OP_FAMILY, fam, 0, &a, 1));
+  k->type = tyop(c, OP_NAT, 0, NULL, NULL, NULL);
+  return args[1] == NULL ? NULL : core_op(c, OP_FM_LEN, 0, 0, args, 2);
+}
+
 /* The curve ops (S2, R17) and the zk ops (S8 B2a): fixed signatures over
    U256, Nat, G1 = Prod U256 U256, G2 = Prod G1 G1 (the EIP-197 field order),
    List (Prod G1 G2), a ring List G1 and a word list List U256. The result is
@@ -2417,6 +2455,8 @@ static const Core *rule(Call *k) {
   case RULE_NAT2:
   case RULE_TO_U256:
     return rule_prim(k, OP_NAT);
+  case RULE_LEN:
+    return rule_len(k);
   case RULE_U256_2:
     return rule_prim(k, OP_U256);
   case RULE_ADDR2:
@@ -2589,6 +2629,8 @@ static int find_known(Checker *c, const char *name, Head *h) {
    is recursion (rule R3). */
 static int unknown_name(Checker *c, const char *name) {
   size_t i;
+  if (time_word(name))
+    return FAIL(c, "REFUSE_TIME", TIME_HINT, name);
   for (i = c->decl_index; i < c->decls->count; i++) {
     if (strcmp(c->decls->items[i].name, name) == 0)
       return FAIL(c, "REFUSE_REC", "%s is this definition or a later one; a definition can use only earlier ones (rule R3)", name);
@@ -2747,6 +2789,8 @@ static const Core *var_core(Checker *c, const char *name, const Value **type) {
     *type = c->m->defs[d].type;
     return core_index(c, CORE_GLOBAL, d);
   }
+  if (time_word(name))
+    return nul(FAIL(c, "REFUSE_TIME", TIME_HINT, name));
   return nul(FAIL(c, "NAME_UNKNOWN", "unknown name %s", name));
 }
 
@@ -3072,7 +3116,10 @@ static const char *name_owner(const Checker *c, const char *name) {
 }
 
 static int name_free(Checker *c, const char *name) {
-  const char *why = name_owner(c, name);
+  const char *why;
+  if (time_word(name))
+    return FAIL(c, "REFUSE_TIME", TIME_HINT, name);
+  why = name_owner(c, name);
   return why == NULL ? 1 : FAIL(c, "REFUSE_NAME", "%s is %s (rule R4)", name, why);
 }
 
@@ -4893,41 +4940,34 @@ static int print_value(Machine *m, const Value *v, char *buf) {
   return value_print(m, NULL, 0, v, buf, PRINT_MAX) ? 1 : diag_fail(m->diag, "EVAL_PRINT", m->def, "the normal form exceeds the printer limits");
 }
 
-static const Value *make_env(Machine *m, const Run *r, uint64_t now, const U256 *block, const U256 *caller) {
-  const Value **args = arena_alloc(m->arena, 3u * sizeof *args);
+/* The kit Env has one field, the caller (S3: no clock, PLAN section 4). */
+static const Value *make_env(Machine *m, const Run *r, const U256 *caller) {
+  const Value **args = arena_alloc(m->arena, sizeof *args);
   if (args == NULL) {
     diag_fail(m->diag, "OOM", m->def, "out of memory");
     return NULL;
   }
-  args[0] = val_nat(m, now);
-  args[1] = val_word(m, WORD_U256, block);
-  args[2] = val_word(m, WORD_ADDR, caller);
-  return args[0] == NULL || args[1] == NULL || args[2] == NULL ? NULL : val_op(m, VAL_OP, OP_CTOR, m->families[r->env].first_ctor, 0, args, 3u);
+  args[0] = val_word(m, WORD_ADDR, caller);
+  return args[0] == NULL ? NULL : val_op(m, VAL_OP, OP_CTOR, m->families[r->env].first_ctor, 0, args, 1u);
 }
 
-/* One call `NOW BLOCK CALLER NAME ARGS...` (D-6 to D-8, O17). A trap is a revert: the
+/* One call `CALLER NAME ARGS...` (D-6 to D-8). A trap is a revert: the
    state does not change. Returns 0, 1, or 2 after EVAL_ARGS. */
 static int run_call(Machine *m, Run *r, uint32_t line, char *const *word, uint32_t count, FILE *out) {
   const Value *args[ENTRY_PARAMS_MAX];
-  U256 *block = arena_alloc(m->arena, sizeof *block);
   U256 *caller = arena_alloc(m->arena, sizeof *caller);
-  const char *name = count > 3u ? word[3] : "";
-  uint64_t now = 0;
-  uint32_t d = count > 3u ? find_def(m, name) : NO_DEF;
+  const char *name = count > 1u ? word[1] : "";
+  uint32_t d = count > 1u ? find_def(m, name) : NO_DEF;
   RunCall call;
   Role role;
   const Value *v;
   uint32_t i;
-  if (block == NULL || caller == NULL)
+  if (caller == NULL)
     return diag_fail(m->diag, "OOM", NULL, "out of memory") + 1;
-  if (count < 4u)
-    return diag_fail(m->diag, "RUN_SCRIPT", NULL, "%s:%u: a call is NOW BLOCK CALLER NAME ARGS...", r->path, line) + 1;
-  if (!parse_u64(word[0], &now))
-    return diag_fail(m->diag, "RUN_SCRIPT", NULL, "%s:%u: NOW '%s' is not a Nat", r->path, line, word[0]) + 1;
-  if (!parse_word(word[1], WORD_U256, block))
-    return diag_fail(m->diag, "RUN_SCRIPT", NULL, "%s:%u: BLOCK '%s' is not a U256 (for example 100u)", r->path, line, word[1]) + 1;
-  if (!parse_word(word[2], WORD_ADDR, caller))
-    return diag_fail(m->diag, "RUN_SCRIPT", NULL, "%s:%u: CALLER '%s' is not an Addr (0x and 40 hex digits)", r->path, line, word[2]) + 1;
+  if (count < 2u)
+    return diag_fail(m->diag, "RUN_SCRIPT", NULL, "%s:%u: a call is CALLER NAME ARGS...", r->path, line) + 1;
+  if (!parse_word(word[0], WORD_ADDR, caller))
+    return diag_fail(m->diag, "RUN_SCRIPT", NULL, "%s:%u: CALLER '%s' is not an Addr (0x and 40 hex digits)", r->path, line, word[0]) + 1;
   m->fuel = EVAL_FUEL_STEPS;
   m->def = name;
   if (d == NO_DEF)
@@ -4935,14 +4975,14 @@ static int run_call(Machine *m, Run *r, uint32_t line, char *const *word, uint32
   role = role_of(m, r, m->defs[d].type, &call);
   if (role == ROLE_HELPER)
     return diag_fail(m->diag, "EVAL_ENTRY", name, "%s:%u: a helper is not an entry or a view", r->path, line) + 1;
-  if (count - 4u != call.param_count)
-    return diag_fail(m->diag, "EVAL_ARGS", name, "%s:%u: the call takes %u arguments, found %u", r->path, line, call.param_count, count - 4u) + 2;
+  if (count - 2u != call.param_count)
+    return diag_fail(m->diag, "EVAL_ARGS", name, "%s:%u: the call takes %u arguments, found %u", r->path, line, call.param_count, count - 2u) + 2;
   for (i = 0; i < call.param_count; i++) {
-    args[i] = entry_arg(m, word[i + 4u], call.params[i]);
+    args[i] = entry_arg(m, word[i + 2u], call.params[i]);
     if (args[i] == NULL)
       return strcmp(m->diag->code != NULL ? m->diag->code : "", "EVAL_ARGS") == 0 ? 2 : 1;
   }
-  v = apply_value(m, apply_value(m, def_value(m, d), make_env(m, r, now, block, caller)), r->state);
+  v = apply_value(m, apply_value(m, def_value(m, d), make_env(m, r, caller)), r->state);
   for (i = 0; i < call.param_count; i++)
     v = apply_value(m, v, args[i]);
   if (v == NULL)

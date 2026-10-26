@@ -67,6 +67,16 @@ if ! rg -q -F 'the path at i1 is 1201, but the type needs 1200' "$tmp/err"; then
   fail=$((fail + 1))
 fi
 
+# A REFUSE_TIME refusal names the op-count form (S3, O3).
+time_hint=0
+build/langc $(kit test/check/kit.txt time-block.lang) check test/check/time-block.lang 2>"$tmp/err" >/dev/null || true
+time_hint=$((time_hint + 1))
+if ! rg -q -F 'count operations: a position is `len r` (an OpPos) and a deadline is a count of later operations' "$tmp/err"; then
+  echo "FAIL time-block.lang: the message does not name the op-count form"
+  fail=$((fail + 1))
+fi
+echo "time hint: $time_hint checked"
+
 # Each line of test/eval/expect.txt is `FILE NAME [ARGS] => OUTPUT`. `langc eval`
 # must exit 0 and print OUTPUT. A trap also prints `langc: EVAL_OVERFLOW: NAME: ...`
 # on stderr.

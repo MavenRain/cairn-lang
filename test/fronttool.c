@@ -96,6 +96,15 @@ static int normal_roundtrip(const char *type, const char *body) {
   return normal_roundtrip_in("", type, body);
 }
 
+static int len_roundtrip(const char *type, const char *body) {
+  return normal_roundtrip_in(
+    "family FreeMon (A : Type 0) := fmEta (fmEtaOf : A) | fmUnit\n"
+    "  | fmSquash (fmFrom : FreeMon A) (fmTo : FreeMon A)"
+    " (fmPathL : Path (FreeMon A) fmFrom fmTo) (fmPathR : Path (FreeMon A) fmFrom fmTo) (i : I) (j : I)\n"
+    "    [ ~i -> fmPathL @ j, i -> fmPathR @ j, ~j -> fmFrom, j -> fmTo ]\n",
+    type, body);
+}
+
 static int internal_print_refused(const char *type, const char *body) {
   char source[512];
   Arena arena;
@@ -251,6 +260,26 @@ static int prove_output(int trap, int broken, const char *poll) {
 
 int main(void) {
   int ok = 1;
+  /* Time words are forbidden in local scopes as well as declarations. */
+  ok &= domain("def bad : (now : Nat) -> Nat := fun x => x", "REFUSE_TIME");
+  ok &= domain("def bad : Nat -> Nat := fun clock => clock", "REFUSE_TIME");
+  ok &= domain("def bad : Nat -> Nat := fun time => 0", "REFUSE_TIME");
+  ok &= domain("def bad : Path Nat 0 0 := fun (block : I) => 0", "REFUSE_TIME");
+  ok &= domain("family Test (timestamp : Type 0) := makeTest (payload : timestamp)", "REFUSE_TIME");
+  ok &= domain("def bad : Path Nat 0 0 := fun epoch => 0", "REFUSE_TIME");
+  /* Counting an open higher cell must preserve its path boundaries. */
+  ok &= len_roundtrip(
+    "(r : FreeMon Unit) -> (p : Path (FreeMon Unit) (fmUnit Unit) r) -> Path Nat 0 (len Unit r)",
+    "fun r p => fun (j : I) => len Unit (hcomp (FreeMon Unit) j (fun (i : I) => [ j -> p @ i ]) (fmUnit Unit))");
+  ok &= len_roundtrip(
+    "(r : FreeMon Unit) -> (p : Path (FreeMon Unit) (fmUnit Unit) r) -> Path Nat 0 (len Unit r)",
+    "fun r p => fun j => len Unit (fmSquash Unit (fmUnit Unit) r p p j j)");
+  ok &= len_roundtrip(
+    "(p : Path (FreeMon Unit) (fmUnit Unit) (fmUnit Unit)) -> "
+    "PathP (fun (j : I) => Path Nat (len Unit (p @ j)) (len Unit (p @ j))) refl refl",
+    "fun p => fun j => fun i => len Unit (fmSquash Unit (fmUnit Unit) (fmUnit Unit) p p i j)");
+  ok &= len_roundtrip(
+    "Path Nat (len Unit (hcomp (FreeMon Unit) i0 (fun (i : I) => [ ]) (fmUnit Unit))) 0", "refl");
   ok &= internal_print_refused("Type 0", "Strm Unit");
   ok &= internal_print_refused("Strm Unit", "strmCorec Unit Unit (fun s => s) (fun s => s) unit");
   ok &= normal_roundtrip("Map Nat Nat -> Nat", "fun m => mapGet m 0");
@@ -351,11 +380,11 @@ int main(void) {
   ok &= normal_roundtrip_in("family N := zero | succ (pred : N)", "N -> N",
                             "elim (fun n => N) zero (fun n ih => succ ih)");
   ok &= domain("family N := zero | succ (pred : N)\n"
-               "family V : N -> Type 0 := nilV : V zero | consV (len : N) (tailV : V len) : V (succ len)\n"
+               "family V : N -> Type 0 := nilV : V zero | consV (vlen : N) (tailV : V vlen) : V (succ vlen)\n"
                "def id : (n : N) -> V n -> N := fun n => "
                "elim (fun (k : N) (v : V k) => N) zero (fun k t ih => succ ih)", NULL);
   ok &= domain("family N := zero | succ (pred : N)\n"
-               "family V : N -> Type 0 := nilV : V zero | consV (len : N) (tailV : V len) : V (succ len) | altV (altLen : N) : V altLen\n"
+               "family V : N -> Type 0 := nilV : V zero | consV (vlen : N) (tailV : V vlen) : V (succ vlen) | altV (altLen : N) : V altLen\n"
                "def id : (n : N) -> V n -> N := fun n => "
                "elim (fun (k : N) (v : V k) => N) zero (fun k t ih => succ ih) (fun k => k)", NULL);
   /* A saturated eliminator with a functional result still consumes the
@@ -365,11 +394,11 @@ int main(void) {
                "def reduction : Path N (id (succ zero) zero) (succ zero) := refl", NULL);
   /* Bare indexed motives accept and check annotations on later binders. */
   ok &= domain("family N := zero | succ (pred : N)\n"
-               "family V : N -> Type 0 := nilV : V zero | consV (len : N) (tailV : V len) : V (succ len)\n"
+               "family V : N -> Type 0 := nilV : V zero | consV (vlen : N) (tailV : V vlen) : V (succ vlen)\n"
                "def id : (n : N) -> V n -> N := fun n v => "
                "elim (fun k => fun (t : V k) => N) zero (fun k t ih => succ ih) v", NULL);
   ok &= domain("family N := zero | succ (pred : N)\n"
-               "family V : N -> Type 0 := nilV : V zero | consV (len : N) (tailV : V len) : V (succ len)\n"
+               "family V : N -> Type 0 := nilV : V zero | consV (vlen : N) (tailV : V vlen) : V (succ vlen)\n"
                "def bad : (n : N) -> V n -> N := fun n v => "
                "elim (fun k => fun (t : N) => N) zero (fun k t ih => succ ih) v", "TYPE_MISMATCH");
   ok &= domain("family F := makeF [ i1 -> missing ]", "DOMAIN_FAMILY");

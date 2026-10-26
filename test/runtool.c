@@ -9,7 +9,7 @@ static int run_fuel(int cached_init) {
   const char *program = "state State := makeState (counter : Nat)\n"
     "def init : State := makeState 0\n"
     "def readCounter : Env -> State -> Nat := fun env s => counter s\n";
-  const char *script = "1 1u 0x00000000000000000000000000000000000000aa readCounter\n";
+  const char *script = "0x00000000000000000000000000000000000000aa readCounter\n";
   const char *want = "1 readCounter = 0\nstate makeState 0\n";
   Arena arena;
   Diag diag;

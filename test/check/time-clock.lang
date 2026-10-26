@@ -1,0 +1,2 @@
+-- REFUSE_TIME (S3, O3): `clock` is a time word; no name can use it.
+def tick : Nat := clock

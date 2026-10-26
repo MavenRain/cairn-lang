@@ -92,3 +92,9 @@ cofamily-state.lang
 enc-state.lang
 quorum-state.lang
 transcript-state.lang
+time-block.lang
+time-now.lang
+time-timestamp.lang
+time-time.lang
+time-clock.lang
+time-epoch.lang

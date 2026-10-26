@@ -13,7 +13,8 @@ not ruled stays a recommendation.
 Status: S0 DONE (seed e222eba). S1 DONE: the USER took each
 recommendation of section 11 (section 1). S2 DONE: the intent-lang kernel
 at 67445ae is ported, without the EVM writer and the swap (section 9).
-Next: S3 (no time).
+S3 DONE: the clock parts are gone, with `REFUSE_TIME`, `OpPos` and
+`len` (sections 4 and 9). Next: S4 (the group and the hash).
 
 ## 1. Rulings
 
@@ -23,6 +24,7 @@ Next: S3 (no time).
 | 2026-10-25 | Name: cairn-lang. | DESIGN.md, S0 answers |
 | 2026-10-25 | Host: TinyCC. All of `langc` is C99 that TinyCC builds, `langc mcp` too. | DESIGN.md, request |
 | 2026-10-25 | S1, verbatim: "Take recommendations". So each S0 question takes (a): Q-S0-1 additive exponential ElGamal; Q-S0-2 secp256k1; Q-S0-3 SHA-256; Q-S0-4 the `tOpen`-th valid share closes a ballot; Q-S0-5 one threshold Schnorr signature (FROST style) under `keyAppend`; Q-S0-6 the hash chain; Q-S0-7 Pedersen DKG with Feldman commitments and a proof of knowledge, and the same for reshare; Q-S0-8 the Anthropic `count_tokens` endpoint; Q-S0-9 the Python and Rust programs run, with equal outputs. | USER, S1 |
+| 2026-10-26 | S3: Q-S3-1 to Q-S3-3 each take (a). Q-S3-1: the kit prelude keeps `family Env := makeEnv (caller : Addr)` without `now` and `block`; `contract.c` and `contract.h` go, the prelude text moves into `src/front/front.c`, and `langc run` calls are `CALLER NAME ARGS`. Q-S3-2: `Out` (`pay`, `pull`, `emit`) stays until S5 (O15). Q-S3-3: the bag family `Pos` stays, and the trace position is `def OpPos : Type 0 := Nat` (section 4). | USER, S3 |
 
 The seed is `bin/new-lang.sh cairn-lang tcc-wasm` from lang-template
 5265a2a. Native code is not a target (the USER did not pick it).
@@ -164,17 +166,34 @@ operation applications. The reading:
   of section 2. "Later" means "after more applications". `Op * -` pairs
   with `Op -> -`, so the free monad pairs with the cofree comonad, and that
   pairing runs a trace on a record.
-- So a position is a `Pos = len r`, and a deadline is a count of later
-  operations, never a clock value.
+- So a position is an `OpPos`, the value of `len r`, and a deadline is a
+  count of later operations, never a clock value. The domain has
+  `def OpPos : Type 0 := Nat` (Q-S3-3 (a)); the name `Pos` stays with the
+  bag positions of the domain.
 
 Consequences:
 
-- The kit has no clock, so no program can name one. The port (S3) removes
-  the intent-lang clock parts: `Env.now`, `Env.block` (its O17), the
-  `NOW BLOCK` script columns and the NUMBER lowering.
+- The kit has no clock, so no program can name one. S3 removed the
+  intent-lang clock parts: `Env.now`, `Env.block` (its O17), the
+  `NOW BLOCK` script columns and the NUMBER lowering (it left with
+  `lower.c` in S2). The kit prelude keeps
+  `family Env := makeEnv (caller : Addr)` (Q-S3-1 (a)) as a static text in
+  `src/front/front.c`, and `langc run` calls are `CALLER NAME ARGS`.
 - New refusal code `REFUSE_TIME`: a program uses one of the removed kit
   words (`now`, `block`, `timestamp`, `time`, `clock`, `epoch`). The fix
-  hint names `len` and the op-count form.
+  hint names `len` and the op-count form. S3 checks the words at a binder
+  and before `NAME_UNKNOWN` (`TIME_WORDS` in `src/front/check.c`).
+- `len : (A : Type 0) -> FreeMon A -> Nat` is a C builtin (`OP_FM_LEN`),
+  not the fold `fmFold A Nat isSetNat 0 natAdd ...`, because the domain
+  cannot prove the Nat monoid laws that `fmFold` needs: `Nat` has only the
+  non-dependent `fold`, `natAdd` reduces only on two literals (so `refl`
+  cannot prove the unit and associativity laws for a variable), and the
+  domain has no axioms and no `isSet Nat` (S3 survey section 7). The
+  builtin counts `fmEta` 1, `fmUnit` 0, `fmMul` the sum of its sides, a
+  unit or associativity path constructor from its trace fields, and a
+  formal hcomp its base when its face is false. Open `fmSquash` cells and
+  hcomps with active faces stay stuck so neutral path boundaries survive
+  normalization. O16 gives the way back to a fold.
 - A ballot has no window. Q-S0-4 RULED (a): a ballot closes when
   the `tOpen`-th valid share for it arrives. Casts that come after that
   share do not count. A threshold of members can always decrypt (they hold
@@ -216,7 +235,7 @@ S2 removes only the EVM writer (`src/evm.c`, `src/asm.c`, `src/lower.c`,
 
 | File | Users at 67445ae | Leaves in |
 |---|---|---|
-| `contract.c` (`Env`, `now`, `caller`) | the front end | S3 (no time) |
+| `contract.c` (`Env`, `now`, `caller`) | the front end | S3 (no time): DONE, the prelude text is in `front.c` |
 | `keccak.c` | `eval.c`, `blsag.c`, `elgamal.c`, `threshold.c` (Fiat-Shamir) | S4 (SHA-256, Q-S0-3 (a)) |
 | `bn254.c` | the Sigma, ElGamal, threshold and bLSAG code | S4 (secp256k1, Q-S0-2 (a)) |
 | `secp256k1.c` (`ecrecover`) | the front end, `test/ballottool.c` | S4: its field code goes into the group backend, `ecrecover` goes |
@@ -293,8 +312,8 @@ mutant of it, as in intent-lang.
 | S0 | Seed from tcc-wasm, DESIGN.md verbatim, this plan, README; gate; seed commit; private repo | DONE e222eba |
 | S1 | The USER rules section 11. Record the rulings here. | DONE (all (a)) |
 | S2 | Port the intent-lang kernel at 67445ae (6.1). Survey first: SAME, CHANGED, INTENT-ONLY. Targets = the intent-lang counts less the EVM and swap rows. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 189, kit-only refusals 24, evals 215, proves 2, build refusals 1 (new), guest differential 28, runs 7, run refusals 11, 11 tool regressions passed. Each count is at its target (`cairn-lang-work/S2-survey.md`). |
-| S3 | No time: remove the clock parts (4), add `REFUSE_TIME`, `Pos` and `len`. | NEXT |
-| S4 | The group and the hash (Q-S0-2 (a), Q-S0-3 (a)): a group interface `group.h` for the Sigma, ElGamal, threshold and bLSAG code; the secp256k1 field and group; SHA-256 (FIPS 180-4 vectors); remove `bn254.c`. | |
+| S3 | No time: remove the clock parts (4), add `REFUSE_TIME`, `OpPos` and `len`. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 195, kit-only refusals 24, evals 218, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1 (new), 11 tool regressions passed. Each count is at its target (`cairn-lang-work/S3-survey.md` section 4; examples 53 with the new `examples/oppos.lang`). Mutants KILLED: `epoch` out of `TIME_WORDS`; `fmEta` counts 2. `len` is a C builtin (section 4). |
+| S4 | The group and the hash (Q-S0-2 (a), Q-S0-3 (a)): a group interface `group.h` for the Sigma, ElGamal, threshold and bLSAG code; the secp256k1 field and group; SHA-256 (FIPS 180-4 vectors); remove `bn254.c`. | NEXT |
 | S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | |
 | S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | |
 | S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | |
@@ -314,7 +333,9 @@ mutant of it, as in intent-lang.
   more, it records why here first.
 - O2 `REFUSE_CELL` comes with the port (S2). The S2 gate must show the
   intent-lang refusal rows for it.
-- O3 The intent-lang `Env.block` (its O17) is removed, not ported (S3).
+- O3 DONE (S3). The intent-lang `Env.block` (its O17) is removed, not
+  ported: `Env` is `makeEnv (caller : Addr)`, and `REFUSE_TIME` refuses
+  the time words.
 - O4 The S2 port must not take `.kanon-exec/` or `.kanon-wait/` (they are
   untracked in intent-lang).
 - O5 The bLSAG domain tag of intent-lang is the bytes of "orbit". S4 sets a
@@ -356,6 +377,12 @@ mutant of it, as in intent-lang.
   `abi --text` still parse, and the `Options` fields `out_path`, `runtime`
   and `json` have no use until S8. `langc contract` lived in the removed
   `src/front/writer.c`, so it is now an unknown command (exit 2).
+- O15 (S3, Q-S3-2 (a)) The kit prelude keeps `Out` (`pay`, `pull`,
+  `emit`) of intent-lang. Off chain there is no token. S5 (Part R)
+  replaces `Out` with the record append, and `pay` and `pull` leave then.
+- O16 (S3) `len` is a C builtin (section 4). If a later slice gives the
+  domain `isSet Nat` and the `natAdd` paths, `len` becomes a domain fold
+  over `fmFold`, and `OP_FM_LEN` goes.
 
 ## 11. Questions for the USER (S0)
 

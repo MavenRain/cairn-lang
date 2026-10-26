@@ -21,10 +21,10 @@ def lawGetOther : Path Nat (mapGet (mapSet m1 8 6) 3) (mapGet m1 3) := refl
 state State := makeState (books : Map Nat U256) (cursor : Nat)
 def init : State := makeState mapEmpty 0
 
--- Entry: set the book at the id, and record the time.
+-- Entry: set the book at the id, and count the op (cursor + 1).
 def setBook : (env : Env) -> (s : State) -> (id : Nat) -> (amount : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (id : Nat) (amount : U256) =>
-    some (pair (makeState (mapSet (books s) id amount) (now env)) nil)
+    some (pair (makeState (mapSet (books s) id amount) (natAdd (cursor s) 1)) nil)
 
 -- View: the book at the id.
 def book : (env : Env) -> (s : State) -> (id : Nat) -> U256 :=

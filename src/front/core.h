@@ -71,6 +71,7 @@ typedef enum {
      and exact on the EVM (precompiles 1, 6, 7, 8). */
   OP_NAT_DIV,
   OP_NAT_MOD,
+  OP_FM_LEN, /* S3: len A r, the op count of a FreeMon trace (survey section 7) */
   OP_HASH,
   OP_ECRECOVER,
   OP_EC_ADD,
@@ -302,7 +303,7 @@ typedef struct {
   uint32_t first_ctor;
   uint32_t ctor_count;
   uint64_t universe; /* the largest universe of a constructor field */
-  Origin origin;     /* ORIGIN_KIT for Env and Out (orbit-lang S3) */
+  Origin origin;     /* ORIGIN_KIT for Env and Out, the kit prelude of front.c */
   /* The index telescope (S6): index_count cores, index k in the context of
      the parameters and the indices before it. 0 for a uniform family. */
   const Core *const *index_types;

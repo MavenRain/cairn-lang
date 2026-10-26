@@ -37,19 +37,19 @@ run_refused() {
   esac
 }
 caller=0x00000000000000000000000000000000000000bb
-run_refused 1 RUN_SCRIPT examples/contract.lang "1 1u 0xbb deposit 5u"
-run_refused 1 RUN_SCRIPT examples/contract.lang "x 1u $caller deposit 5u"
-run_refused 2 EVAL_ARGS examples/contract.lang "1 1u $caller deposit 5"
-run_refused 2 EVAL_ARGS examples/contract.lang "1 1u $caller deposit 5u 6u"
-run_refused 1 EVAL_ENTRY examples/contract.lang "1 1u $caller checkpoint init 7u"
-run_refused 1 EVAL_ENTRY examples/contract.lang "1 1u $caller nope"
-run_refused 1 RUN_INIT examples/entries.lang "1 1u $caller addPrice 1 2"
-run_refused 1 EVAL_ENTRY examples/map.lang "1 1u $caller putAll 3"
-run_refused 1 EVAL_ENTRY examples/map.lang "1 1u $caller allBooks"
-run_refused 1 RUN_SCRIPT examples/contract.lang "1 x $caller ping"
+run_refused 1 RUN_SCRIPT examples/contract.lang "0xbb deposit 5u"
+run_refused 1 RUN_SCRIPT examples/contract.lang "$caller"
+run_refused 2 EVAL_ARGS examples/contract.lang "$caller deposit 5"
+run_refused 2 EVAL_ARGS examples/contract.lang "$caller deposit 5u 6u"
+run_refused 1 EVAL_ENTRY examples/contract.lang "$caller checkpoint init 7u"
+run_refused 1 EVAL_ENTRY examples/contract.lang "$caller nope"
+run_refused 1 RUN_INIT examples/entries.lang "$caller addPrice 1 2"
+run_refused 1 EVAL_ENTRY examples/map.lang "$caller putAll 3"
+run_refused 1 EVAL_ENTRY examples/map.lang "$caller allBooks"
+run_refused 1 RUN_SCRIPT examples/contract.lang "1 1u $caller ping"
 
 # A NUL cannot hide extra words. Calls before the bad line keep their output.
-printf '1 1u %s balance\n2 2u %s deposit 5u\000 6u\n' "$caller" "$caller" >"$tmp/bad.script"
+printf '%s balance\n%s deposit 5u\000 6u\n' "$caller" "$caller" >"$tmp/bad.script"
 status=0
 build/langc --kit run examples/contract.lang "$tmp/bad.script" >"$tmp/out" 2>"$tmp/err" || status=$?
 printf '1 balance = 0u\n' >"$tmp/want"

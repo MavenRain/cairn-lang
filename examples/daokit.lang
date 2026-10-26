@@ -13,10 +13,11 @@
 -- the shares of the quorum {1, 2} (the Lagrange constants l1 l2 are contract
 -- constants, O31): yes = m, no = casts - yes, and the window moves to the
 -- proposal when yes > no (a tie keeps it). The fill and cancel are slice b5.
-state State := makeState (used : Map U256 Flag) (pend : Map U256 U256) (stage : Map U256 U256) (t0ax : U256) (t0ay : U256) (t0bx : U256) (t0by : U256) (t1ax : U256) (t1ay : U256) (t1bx : U256) (t1by : U256) (casts : U256) (castEnd : U256) (proposal : U256) (window : U256) (enacted : Flag) (keys : Map U256 Flag) (fills : Map U256 U256)
+state State := makeState (used : Map U256 Flag) (pend : Map U256 U256) (stage : Map U256 U256) (t0ax : U256) (t0ay : U256) (t0bx : U256) (t0by : U256) (t1ax : U256) (t1ay : U256) (t1bx : U256) (t1by : U256) (casts : U256) (castEnd : U256) (proposal : U256) (window : U256) (enacted : Flag) (keys : Map U256 Flag) (fills : Map U256 U256) (seq : U256)
 
--- castEnd 10, proposal 4, window 6.
-def init : State := makeState mapEmpty mapEmpty mapEmpty 0u 0u 0u 0u 0u 0u 0u 0u 0u 10u 4u 6u flagNo mapEmpty mapEmpty
+-- castEnd 12, proposal 4, window 6, seq 0. seq is the count of entries done (S3, no time): each
+-- entry adds 1, a castSeal needs seq <= castEnd and enact needs seq > castEnd.
+def init : State := makeState mapEmpty mapEmpty mapEmpty 0u 0u 0u 0u 0u 0u 0u 0u 0u 12u 4u 6u flagNo mapEmpty mapEmpty 0u
 
 def ballotTag : U256 := 0x62616c6c6f74u
 
@@ -326,7 +327,7 @@ def castSig : (env : Env) -> (s : State) -> (ix iy u1x u1y u2x u2y v1x v1y v2x v
             (hash (nullOf ix iy) 4u) v1x) (hash (nullOf ix iy) 5u) v1y) (hash (nullOf ix iy) 6u) v2x) (hash (nullOf ix iy) 7u) v2y)
           (mapSet (mapSet (mapSet (stage s) (nullOf ix iy) 1u) (hash (nullOf ix iy) 0u) 0u) (hash (nullOf ix iy) 1u) 0u)
           (t0ax s) (t0ay s) (t0bx s) (t0by s) (t1ax s) (t1ay s) (t1bx s) (t1by s)
-          (casts s) (castEnd s) (proposal s) (window s) (enacted s) (keys s) (fills s)) nil))
+          (casts s) (castEnd s) (proposal s) (window s) (enacted s) (keys s) (fills s) (u256Add (seq s) 1u)) nil))
         none)
 
 -- Entry castSlot (15 words): N has a castSig, j is 0 or 1, the OR proof of slot j on the kept words, then the flag of slot j.
@@ -340,7 +341,7 @@ def castSlot : (env : Env) -> (s : State) -> (ix iy j a0x a0y b0x b0y a1x a1y b1
               a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1)
           (some (pair (makeState (used s) (pend s) (mapSet (stage s) (hash (nullOf ix iy) j) 1u)
             (t0ax s) (t0ay s) (t0bx s) (t0by s) (t1ax s) (t1ay s) (t1bx s) (t1by s)
-            (casts s) (castEnd s) (proposal s) (window s) (enacted s) (keys s) (fills s)) nil))
+            (casts s) (castEnd s) (proposal s) (window s) (enacted s) (keys s) (fills s) (u256Add (seq s) 1u)) nil))
           none)
         none)
       none
@@ -350,9 +351,9 @@ def afterSeal : (s : State) -> (n : U256) -> (a0 b0 a1 b1 : Prod U256 U256) -> S
   fun (s : State) (n : U256) (a0 b0 a1 b1 : Prod U256 U256) =>
     makeState (mapSet (used s) n flagYes) (pend s) (stage s)
       (first a0) (second a0) (first b0) (second b0) (first a1) (second a1) (first b1) (second b1)
-      (u256Add (casts s) 1u) (castEnd s) (proposal s) (window s) (enacted s) (keys s) (fills s)
+      (u256Add (casts s) 1u) (castEnd s) (proposal s) (window s) (enacted s) (keys s) (fills s) (u256Add (seq s) 1u)
 
--- Entry castSeal (7 words): N not used, both slot flags, block <= castEnd, the sum proof on the kept slots, then the tally add.
+-- Entry castSeal (7 words): N not used, both slot flags, seq <= castEnd, the sum proof on the kept slots, then the tally add.
 def castSeal : (env : Env) -> (s : State) -> (ix iy ax ay bx by z : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (ix iy ax ay bx by z : U256) =>
     flagIf (mapGet (used s) (nullOf ix iy))
@@ -360,7 +361,7 @@ def castSeal : (env : Env) -> (s : State) -> (ix iy ax ay bx by z : U256) -> Opt
       (flagIf (u256Eq (mapGet (stage s) (nullOf ix iy)) 1u)
         (flagIf (u256Eq (mapGet (stage s) (hash (nullOf ix iy) 0u)) 1u)
           (flagIf (u256Eq (mapGet (stage s) (hash (nullOf ix iy) 1u)) 1u)
-            (flagIf (u256Le (block env) (castEnd s))
+            (flagIf (u256Le (seq s) (castEnd s))
               (flagIf (sumWith (ctxOf ix iy) (ecAdd (kept (pend s) (nullOf ix iy) 0u) (kept (pend s) (nullOf ix iy) 4u))
                     (ecAdd (kept (pend s) (nullOf ix iy) 2u) (kept (pend s) (nullOf ix iy) 6u)) ax ay bx by z)
                 (some (pair (afterSeal s (nullOf ix iy)
@@ -380,12 +381,12 @@ def reactor : Addr := 0x0000000000000000000000000072656163746f72
 def nextWindow : (s : State) -> (m : U256) -> U256 :=
   fun (s : State) (m : U256) => flagIf (u256Le m (u256Sub (casts s) m)) (window s) (proposal s)
 
--- Entry enact (15 words): block > castEnd, not enacted, m <= casts, the opening of T0 (two DLEQ shares of {1, 2}),
+-- Entry enact (15 words): seq > castEnd, not enacted, m <= casts, the opening of T0 (two DLEQ shares of {1, 2}),
 -- then the window moves to nextWindow, enacted is set, and one pay pushes the window to the reactor (the
 -- ERC-20 transfer selector; the to word is not read).
 def enact : (env : Env) -> (s : State) -> (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2x a2y b2x b2y z2 m : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2x a2y b2x b2y z2 m : U256) =>
-    flagIf (u256Le (block env) (castEnd s))
+    flagIf (u256Le (seq s) (castEnd s))
       none
       (flagIf (enacted s)
         none
@@ -395,7 +396,7 @@ def enact : (env : Env) -> (s : State) -> (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2
             (some (pair (makeState (used s) (pend s) (stage s)
               (t0ax s) (t0ay s) (t0bx s) (t0by s) (t1ax s) (t1ay s) (t1bx s) (t1by s)
               (casts s) (castEnd s) (proposal s) (nextWindow s m)
-              flagYes (keys s) (fills s)) (cons (pay reactor reactor (nextWindow s m)) nil)))
+              flagYes (keys s) (fills s) (u256Add (seq s) 1u)) (cons (pay reactor reactor (nextWindow s m)) nil)))
             none)
           none))
 
@@ -415,9 +416,8 @@ def stageOf : (env : Env) -> (s : State) -> (ix iy : U256) -> U256 :=
         (u256Add (u256Add (mapGet (stage s) (hash (nullOf ix iy) 1u)) (mapGet (stage s) (hash (nullOf ix iy) 1u)))
           (u256Add (mapGet (stage s) (hash (nullOf ix iy) 1u)) (mapGet (stage s) (hash (nullOf ix iy) 1u)))))
 
--- Eval rows (test/eval/expect.txt): the 3 casts at BLOCK 0, then enact at BLOCK 11 (> castEnd).
-def e0 : Env := makeEnv 0 0u 0x00000000000000000000000000000000000000aa
-def e11 : Env := makeEnv 11 11u 0x00000000000000000000000000000000000000aa
+-- Eval rows (test/eval/expect.txt): the 3 casts (ops 1 to 12), one more op (reslot), then enact at seq 13 > castEnd.
+def e0 : Env := makeEnv 0x00000000000000000000000000000000000000aa
 def v0sig : Option (Prod State (List Out)) := castSig e0 init b0ix b0iy b0j0c1x b0j0c1y b0j0c2x b0j0c2y b0j1c1x b0j1c1y b0j1c2x b0j1c2y b0c1 b0s1 b0s2 b0s3
 def v0slots : Option (Prod State (List Out)) := bind v0sig (fun (r : Prod State (List Out)) =>
   bind (castSlot e0 (first r) b0ix b0iy 0u b0j0a0x b0j0a0y b0j0b0x b0j0b0y b0j0a1x b0j0a1y b0j0b1x b0j0b1y b0j0e0 b0j0e1 b0j0z0 b0j0z1) (fun (q : Prod State (List Out)) =>
@@ -428,11 +428,16 @@ def v1 : Option (Prod State (List Out)) := bind v0 (fun (r : Prod State (List Ou
     bind (castSlot e0 (first a) b1ix b1iy 0u b1j0a0x b1j0a0y b1j0b0x b1j0b0y b1j0a1x b1j0a1y b1j0b1x b1j0b1y b1j0e0 b1j0e1 b1j0z0 b1j0z1) (fun (b : Prod State (List Out)) =>
       bind (castSlot e0 (first b) b1ix b1iy 1u b1j1a0x b1j1a0y b1j1b0x b1j1b0y b1j1a1x b1j1a1y b1j1b1x b1j1b1y b1j1e0 b1j1e1 b1j1z0 b1j1z1) (fun (c : Prod State (List Out)) =>
         castSeal e0 (first c) b1ix b1iy b1sumax b1sumay b1sumbx b1sumby b1sumz))))
-def v2 : Option (Prod State (List Out)) := bind v1 (fun (r : Prod State (List Out)) =>
+def v2slots : Option (Prod State (List Out)) := bind v1 (fun (r : Prod State (List Out)) =>
   bind (castSig e0 (first r) b2ix b2iy b2j0c1x b2j0c1y b2j0c2x b2j0c2y b2j1c1x b2j1c1y b2j1c2x b2j1c2y b2c1 b2s1 b2s2 b2s3) (fun (a : Prod State (List Out)) =>
     bind (castSlot e0 (first a) b2ix b2iy 0u b2j0a0x b2j0a0y b2j0b0x b2j0b0y b2j0a1x b2j0a1y b2j0b1x b2j0b1y b2j0e0 b2j0e1 b2j0z0 b2j0z1) (fun (b : Prod State (List Out)) =>
-      bind (castSlot e0 (first b) b2ix b2iy 1u b2j1a0x b2j1a0y b2j1b0x b2j1b0y b2j1a1x b2j1a1y b2j1b1x b2j1b1y b2j1e0 b2j1e1 b2j1z0 b2j1z1) (fun (c : Prod State (List Out)) =>
-        castSeal e0 (first c) b2ix b2iy b2sumax b2sumay b2sumbx b2sumby b2sumz))))
+      castSlot e0 (first b) b2ix b2iy 1u b2j1a0x b2j1a0y b2j1b0x b2j1b0y b2j1a1x b2j1a1y b2j1b1x b2j1b1y b2j1e0 b2j1e1 b2j1z0 b2j1z1)))
+def v2 : Option (Prod State (List Out)) := bind v2slots (fun (c : (Prod State (List Out))) =>
+  castSeal e0 (first c) b2ix b2iy b2sumax b2sumay b2sumbx b2sumby b2sumz)
+-- One more op: voter 2 casts slot 1 again. The state keeps its words; only seq moves.
+def reslot : (s : State) -> Option (Prod State (List Out)) :=
+  fun (s : State) => castSlot e0 s b2ix b2iy 1u b2j1a0x b2j1a0y b2j1b0x b2j1b0y b2j1a1x b2j1a1y b2j1b1x b2j1b1y b2j1e0 b2j1e1 b2j1z0 b2j1z1
+def v2late : Option (Prod State (List Out)) := bind v2 (fun (r : (Prod State (List Out))) => reslot (first r))
 def openWith : (m : U256) -> (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
   fun (m : U256) (env : Env) (s : State) => enact env s tyd1x tyd1y tya1x tya1y tyb1x tyb1y tyz1 tyd2x tyd2y tya2x tya2y tyb2x tyb2y tyz2 m
 def stageSig : Option U256 := map (fun (r : Prod State (List Out)) => stageOf e0 (first r) b0ix b0iy) v0sig
@@ -443,9 +448,12 @@ def tallyHost : Option Flag := map (fun (r : Prod State (List Out)) =>
 def castsAfter : Option U256 := map (fun (r : Prod State (List Out)) => castCount e0 (first r)) v2
 def recast : Option (Prod State (List Out)) := bind v0 (fun (r : Prod State (List Out)) => castSig e0 (first r) b0ix b0iy b0j0c1x b0j0c1y b0j0c2x b0j0c2y b0j1c1x b0j1c1y b0j1c2x b0j1c2y b0c1 b0s1 b0s2 b0s3)
 def sealEarly : Option (Prod State (List Out)) := bind v0sig (fun (r : Prod State (List Out)) => castSeal e0 (first r) b0ix b0iy b0sumax b0sumay b0sumbx b0sumby b0sumz)
-def sealLate : Option (Prod State (List Out)) := bind v0slots (fun (r : Prod State (List Out)) => castSeal e11 (first r) b0ix b0iy b0sumax b0sumay b0sumbx b0sumby b0sumz)
+-- sealLate: two more ops after the slots of voter 2, so its castSeal comes at seq 13 > castEnd 12.
+def sealLate : Option (Prod State (List Out)) := bind (bind v2slots (fun (r : (Prod State (List Out))) => reslot (first r))) (fun (a : (Prod State (List Out))) =>
+  bind (reslot (first a)) (fun (b : (Prod State (List Out))) => castSeal e0 (first b) b2ix b2iy b2sumax b2sumay b2sumbx b2sumby b2sumz))
+-- enactEarly: enact at seq 12 (not > castEnd 12).
 def enactEarly : Option (Prod State (List Out)) := bind v2 (fun (r : Prod State (List Out)) => openWith 2u e0 (first r))
-def enactM3 : Option (Prod State (List Out)) := bind v2 (fun (r : Prod State (List Out)) => openWith 3u e11 (first r))
-def windowAfter : Option U256 := map (fun (q : Prod State (List Out)) => windowNow e11 (first q)) (bind v2 (fun (r : Prod State (List Out)) => openWith 2u e11 (first r)))
-def enactPay : Option (List Out) := map (fun (q : Prod State (List Out)) => second q) (bind v2 (fun (r : Prod State (List Out)) => openWith 2u e11 (first r)))
-def enactTwice : Option (Prod State (List Out)) := bind (bind v2 (fun (r : Prod State (List Out)) => openWith 2u e11 (first r))) (fun (q : Prod State (List Out)) => openWith 2u e11 (first q))
+def enactM3 : Option (Prod State (List Out)) := bind v2late (fun (r : Prod State (List Out)) => openWith 3u e0 (first r))
+def windowAfter : Option U256 := map (fun (q : Prod State (List Out)) => windowNow e0 (first q)) (bind v2late (fun (r : Prod State (List Out)) => openWith 2u e0 (first r)))
+def enactPay : Option (List Out) := map (fun (q : Prod State (List Out)) => second q) (bind v2late (fun (r : Prod State (List Out)) => openWith 2u e0 (first r)))
+def enactTwice : Option (Prod State (List Out)) := bind (bind v2late (fun (r : Prod State (List Out)) => openWith 2u e0 (first r))) (fun (q : Prod State (List Out)) => openWith 2u e0 (first q))

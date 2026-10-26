@@ -1,0 +1,8 @@
+-- REFUSE_TIME (S3, O3): `block` is a time word and the kit Env has no block
+-- field. A contract counts operations: a position is `len r` (an OpPos). This
+-- row was the example examples/blocks.lang (slice S8, O17).
+state State := makeState (seen : U256)
+def init : State := makeState 0u
+
+def stamp : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) => some (pair (makeState (block env)) nil)

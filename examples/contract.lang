@@ -1,5 +1,5 @@
 -- Contracts (kit slice K3a): the state, the start state, an event, entries, a helper and a view.
--- The contract prelude gives Env (now, caller) and Out (pay, pull, emit).
+-- The kit prelude gives Env (caller) and Out (pay, pull, emit).
 state State := makeState (owner : Addr) (held : U256) history (earned : U256) (cursor : Nat)
 
 def asset : Addr := 0x00000000000000000000000000000000000000ee
@@ -25,10 +25,10 @@ def withdraw : (env : Env) -> (s : State) -> (amount : U256) -> Option (Prod Sta
         (cons (pay asset (owner s) amount) nil)))
       none
 
--- Entry with no arguments: record the time and log held and earned (event Stamped).
+-- Entry with no arguments: count the stamp (cursor + 1) and log held and earned (event Stamped).
 def stamp : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) =>
-    some (pair (makeState (owner s) (held s) (earned s) (now env))
+    some (pair (makeState (owner s) (held s) (earned s) (natAdd (cursor s) 1))
       (cons (Stamped (held s) (earned s)) nil))
 
 -- Helper (no Env): add to the history field earned.

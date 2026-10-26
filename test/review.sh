@@ -72,10 +72,10 @@ caller=0x00000000000000000000000000000000000000bb
 cat >"$tmp/args.script" <<EOF
 -- A comment does not increment the call number.
 
-1 1u $caller natView 18446744073709551615
-2 2u $caller flagView 1
-3 3u $caller wordView 0x10u
-4 4u $caller addrView $caller
+$caller natView 18446744073709551615
+$caller flagView 1
+$caller wordView 0x10u
+$caller addrView $caller
 EOF
 cat >"$tmp/want" <<EOF
 1 natView = 18446744073709551615
@@ -87,7 +87,7 @@ EOF
 build/langc --kit run "$tmp/args.lang" "$tmp/args.script" >"$tmp/got"
 cmp "$tmp/want" "$tmp/got"
 for call in 'natView 18446744073709551616' 'flagView 2' 'wordView 5' 'addrView 0xbb'; do
-  printf '1 1u %s %s\n' "$caller" "$call" >"$tmp/args.script"
+  printf '%s %s\n' "$caller" "$call" >"$tmp/args.script"
   status=0
   build/langc --kit run "$tmp/args.lang" "$tmp/args.script" >"$tmp/got" 2>"$tmp/err" || status=$?
   test "$status" = 2

@@ -71,6 +71,7 @@ The compiler enforces these rules:
 | R2 | `REFUSE_AXIOM` | an `axiom` declaration |
 | R3 | `REFUSE_REC` | `def rec`, or a definition that refers to itself or to a later definition |
 | R4 | `REFUSE_NAME` | a core name, a domain name, a reserved name or a repeated name as a new definition |
+| R4 | `REFUSE_TIME` | a time word (`now`, `block`, `timestamp`, `time`, `clock`, `epoch`) as a name or a use; the message says to count operations (`len r`, an `OpPos`) |
 
 ## CLI
 

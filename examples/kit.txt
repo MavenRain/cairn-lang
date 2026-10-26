@@ -32,6 +32,5 @@ zkcast.lang
 enc-ideal.lang
 threshold.lang
 onehot.lang
-blocks.lang
 ballot.lang
 daokit.lang

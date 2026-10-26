@@ -1,0 +1,2 @@
+-- REFUSE_TIME (S3, O3): `epoch` is a time word; no declaration can take it.
+def epoch : Nat := 1

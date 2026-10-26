@@ -5,7 +5,7 @@ TCC ?= tcc
 CC ?= cc
 CFLAGS = -std=c99 -Wall -Werror -Isrc
 CLANG_FLAGS = -std=c99 -Wall -Wextra -Wswitch-enum -Werror -fsyntax-only -Isrc
-FRONT = src/front/base.c src/front/u256.c src/front/bn254.c src/front/secp256k1.c src/front/blsag.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/contract.c src/front/eval.c src/front/check.c src/keccak.c
+FRONT = src/front/base.c src/front/u256.c src/front/bn254.c src/front/secp256k1.c src/front/blsag.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/eval.c src/front/check.c src/keccak.c
 SRC = src/main.c $(FRONT)
 FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c,$(FRONT))
 BLSAG_TOOL = test/blsagtool.c src/front/u256.c src/front/bn254.c src/front/blsag.c src/keccak.c

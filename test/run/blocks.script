@@ -1,4 +1,0 @@
--- A call script for examples/blocks.lang (slice S8, O17). BLOCK (42u) is not
--- NOW (1): the state gets the block number. test/evm.sh runs the call on
--- `evm t8n` (S10, O36), thus the caller is the t8n key address.
-1 42u 0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b stamp

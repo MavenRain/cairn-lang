@@ -1,7 +1,19 @@
 #include <string.h>
 
-#include "front/contract.h"
 #include "front/front.h"
+
+/* The kit prelude. front_load reads this text after domain/domain.lang, as
+   trusted text of origin ORIGIN_KIT (orbit-lang S3). Thus rule R1 allows the
+   two families and rule R4 makes their names core names. A guest program
+   cannot declare them (REFUSE_KIT). Env has no clock (S3, PLAN section 4):
+   its one field is the caller. */
+#define KIT_SOURCE_NAME "kit prelude"
+
+static const char kit_source[] =
+  "family Env := makeEnv (caller : Addr)\n"
+  "family Out := pay (payToken : Addr) (payTo : Addr) (payAmount : U256)\n"
+  "  | pull (pullToken : Addr) (pullFrom : Addr) (pullTo : Addr) (pullAmount : U256)\n"
+  "  | emit (emitTag : Nat) (emitFields : List U256)\n";
 
 static int load_one(Arena *arena, const char *source, Origin origin, const char *text, size_t len, DeclList *out, Diag *diag) {
   TokenList toks;
@@ -115,7 +127,7 @@ int front_load(Arena *arena, const char *source, const char *text, size_t len, D
   out->count = 0;
   out->cap = 0;
   if (!load_one(arena, "domain/domain.lang", ORIGIN_DOMAIN, (const char *)domain_source, domain_source_len, out, diag)
-      || !load_one(arena, CONTRACT_SOURCE_NAME, ORIGIN_KIT, contract_source, contract_source_len, out, diag))
+      || !load_one(arena, KIT_SOURCE_NAME, ORIGIN_KIT, kit_source, sizeof kit_source - 1u, out, diag))
     return 0;
   first = out->count;
   return load_one(arena, source, ORIGIN_PROGRAM, text, len, out, diag)
@@ -128,7 +140,7 @@ int front_load_domain(Arena *arena, const char *source, const char *domain, cons
   out->count = 0;
   out->cap = 0;
   if (!load_one(arena, "domain/domain.lang", ORIGIN_DOMAIN, (const char *)domain_source, domain_source_len, out, diag)
-      || !load_one(arena, CONTRACT_SOURCE_NAME, ORIGIN_KIT, contract_source, contract_source_len, out, diag)
+      || !load_one(arena, KIT_SOURCE_NAME, ORIGIN_KIT, kit_source, sizeof kit_source - 1u, out, diag)
       || !load_one(arena, source, ORIGIN_DOMAIN, domain, strlen(domain), out, diag))
     return 0;
   first = out->count;
