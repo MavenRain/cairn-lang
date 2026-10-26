@@ -46,7 +46,6 @@ nat-addr.lang
 nat-u256.lang
 no-type.lang
 not-function.lang
-pairing-list.lang
 path-end.lang
 path-ev.lang
 path-k.lang

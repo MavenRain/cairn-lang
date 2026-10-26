@@ -1,1 +1,0 @@
-def f : U256 -> Nat -> U256 -> U256 -> Addr := fun (h : U256) (v : Nat) (r w : U256) => ecrecover h v r w

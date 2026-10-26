@@ -9,7 +9,7 @@
 #include "front/elgamal.h"
 
 /* The ciphertext of M under PK with the nonce r_I. */
-static void encrypt_u64(ElgCipher *out, const G1 *pk, uint64_t m, uint64_t i) {
+static void encrypt_u64(ElgCipher *out, const GroupPoint *pk, uint64_t m, uint64_t i) {
   U256 w;
   U256 r;
   u256_from_u64(&w, m);
@@ -31,7 +31,7 @@ static int row(const char *name, const U256 *sk, const ElgCipher *ct, uint32_t b
 int main(int argc, char **argv) {
   U256 sk;
   U256 k;
-  G1 pk;
+  GroupPoint pk;
   ElgCipher a;
   ElgCipher b;
   ElgCipher sum;

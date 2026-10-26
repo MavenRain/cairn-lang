@@ -2,9 +2,8 @@
    front/core.h). SHARED by the tcc kits. */
 #include "front/core.h"
 #include "front/blsag.h"
-#include "front/bn254.h"
-#include "front/secp256k1.h"
-#include "keccak.h"
+#include "front/group.h"
+#include "sha256.h"
 
 #include <string.h>
 
@@ -28,8 +27,8 @@ static const char *const OP_NAMES[] = {
   [OP_FLAG_IF] = "flagIf", [OP_U256_ADD] = "u256Add", [OP_U256_SUB] = "u256Sub",
   [OP_U256_LE] = "u256Le",
   [OP_U256_EQ] = "u256Eq", [OP_TO_U256] = "toU256",
-  [OP_NAT_DIV] = "natDiv", [OP_NAT_MOD] = "natMod", [OP_FM_LEN] = "len", [OP_HASH] = "hash", [OP_ECRECOVER] = "ecrecover",
-  [OP_EC_ADD] = "ecAdd", [OP_EC_MUL] = "ecMul", [OP_EC_PAIRING] = "ecPairing", [OP_ADDR_TO_U256] = "addrToU256",
+  [OP_NAT_DIV] = "natDiv", [OP_NAT_MOD] = "natMod", [OP_FM_LEN] = "len", [OP_HASH] = "hash",
+  [OP_EC_ADD] = "ecAdd", [OP_EC_MUL] = "ecMul", [OP_ADDR_TO_U256] = "addrToU256",
   [OP_ADDR_EQ] = "addrEq", [OP_PROJ] = "?", [OP_KMAP] = "Map", [OP_KMAP_OF] = "mapOf",
   [OP_KMAP_GET] = "mapGet", [OP_KMAP_SET] = "mapSet",
   [OP_ZK_HP] = "zkHp", [OP_ZK_KEY] = "zkKey", [OP_ZK_DIGEST] = "zkDigest",
@@ -57,8 +56,8 @@ static const unsigned char OP_ARITY[] = {
   [OP_NAT_EQ] = 2, [OP_NAT_LE] = 2, [OP_FLAG_IF] = 3, [OP_U256_ADD] = 2,
   [OP_U256_SUB] = 2, [OP_U256_LE] = 2,
   [OP_U256_EQ] = 2, [OP_TO_U256] = 1, [OP_ADDR_EQ] = 2,
-  [OP_NAT_DIV] = 2, [OP_NAT_MOD] = 2, [OP_FM_LEN] = 2, [OP_HASH] = 2, [OP_ECRECOVER] = 4,
-  [OP_EC_ADD] = 2, [OP_EC_MUL] = 2, [OP_EC_PAIRING] = 1, [OP_ADDR_TO_U256] = 1,
+  [OP_NAT_DIV] = 2, [OP_NAT_MOD] = 2, [OP_FM_LEN] = 2, [OP_HASH] = 2,
+  [OP_EC_ADD] = 2, [OP_EC_MUL] = 2, [OP_ADDR_TO_U256] = 1,
   [OP_PROJ] = 1, [OP_KMAP] = 2, [OP_KMAP_OF] = VARIES, [OP_KMAP_GET] = 3, [OP_KMAP_SET] = 4,
   [OP_ZK_HP] = 1, [OP_ZK_KEY] = 1, [OP_ZK_DIGEST] = 1, [OP_ZK_SIGN] = 4, [OP_ZK_VERIFY] = 4,
   [OP_ZK_BALLOT] = 1, [OP_ZK_WITNESS] = 0, [OP_ZK_CAST] = 4, [OP_ZK_PROVE] = 1, [OP_ZK_PROJECT] = 2, [OP_ZK_CHECK] = 4,
@@ -1428,27 +1427,14 @@ static const Value *to_u256(Machine *m, const Value *const *a, uint32_t n) {
   return word_value(m, &r);
 }
 
-/* The 32 big-endian bytes of X at OUT (limb 3 is the most significant). */
-static void word_bytes(const U256 *x, unsigned char *out) {
-  for (uint32_t i = 0; i < 32u; i++)
-    out[i] = (unsigned char)(x->limb[3u - i / 8u] >> (56u - 8u * (i % 8u)));
-}
-
-/* hash x y (S2, R16): KECCAK256 of the 64 packed bytes, as IR_OP_KECCAK. */
+/* hash x y (S2, R16): SHA-256 of the 64 packed bytes, x then y, each
+   big-endian (slice S4, sha256_words). */
 static const Value *hash_words(Machine *m, const Value *const *a, uint32_t n) {
   const Value *out;
-  unsigned char data[64], digest[32];
   U256 r;
   if (!word_args(m, OP_HASH, VAL_WORD, a, n, &out))
     return out;
-  word_bytes(a[0]->word, data);
-  word_bytes(a[1]->word, data + 32);
-  keccak256(data, sizeof data, digest);
-  for (uint32_t k = 0; k < 4u; k++) {
-    r.limb[3u - k] = 0;
-    for (uint32_t j = 0; j < 8u; j++)
-      r.limb[3u - k] = (r.limb[3u - k] << 8) | digest[8u * k + j];
-  }
+  sha256_words(&r, a[0]->word, a[1]->word);
   return word_value(m, &r);
 }
 
@@ -1460,9 +1446,8 @@ static const Value *addr_to_u256(Machine *m, const Value *const *a, uint32_t n) 
   return word_value(m, a[0]->word);
 }
 
-/* ecPairing (S2, R17) and an open curve op or ecrecover: a trap argument
-   gives the trap; else the application is stuck, closed pairing arguments
-   included. The chain test is the differential gate (O5). */
+/* An open curve or zk op: a trap argument gives the trap; else the
+   application is stuck. */
 static const Value *opaque(Machine *m, Op op, const Value *const *a, uint32_t n) {
   for (uint32_t i = 0; i < n; i++) {
     if (a[i]->kind == VAL_TRAP)
@@ -1471,60 +1456,41 @@ static const Value *opaque(Machine *m, Op op, const Value *const *a, uint32_t n)
   return val_op(m, VAL_STUCK, op, 0, 0, a, n);
 }
 
-/* 1 when V is a closed G1: a pair of two words. */
+/* 1 when V is a closed point: a pair of two words. */
 static int closed_point(const Value *v) {
   return val_is(v, OP_PAIR) && v->args[0]->kind == VAL_WORD && v->args[1]->kind == VAL_WORD;
 }
 
 /* ecAdd and ecMul (S8 B1, USER ruling Q1): closed arguments compute in the
-   host (front/bn254.c). A coordinate at or above p or a point not on the
-   curve traps like an overflow (R14: the host reading of the 0x06 and 0x07
-   revert, R18). An open argument keeps the application stuck (opaque), so
-   the lowerer still emits the precompile. */
+   host on secp256k1 (front/group.h, slice S4). A coordinate at or above p or
+   a point not on the curve traps like an overflow (R14, R18). An open
+   argument keeps the application stuck (opaque). */
 static const Value *ec_op(Machine *m, Op op, const Value *const *a, uint32_t n) {
-  G1 p;
-  G1 q;
+  GroupPoint p;
+  GroupPoint q;
   U256 x;
   U256 y;
   if (!closed_point(a[0]) || (op == OP_EC_ADD ? !closed_point(a[1]) : a[1]->kind != VAL_WORD))
     return opaque(m, op, a, n);
-  if (!g1_from_words(&p, a[0]->args[0]->word, a[0]->args[1]->word))
+  if (!group_from_words(&p, a[0]->args[0]->word, a[0]->args[1]->word))
     return overflow(m);
   if (op == OP_EC_ADD) {
-    if (!g1_from_words(&q, a[1]->args[0]->word, a[1]->args[1]->word))
+    if (!group_from_words(&q, a[1]->args[0]->word, a[1]->args[1]->word))
       return overflow(m);
-    g1_add(&p, &p, &q);
+    group_add(&p, &p, &q);
   } else {
-    g1_mul(&p, &p, a[1]->word);
+    group_mul(&p, &p, a[1]->word);
   }
-  g1_to_words(&x, &y, &p);
+  group_to_words(&x, &y, &p);
   return make(m, VAL_OP, OP_PAIR, 0, 2, word_value(m, &x), word_value(m, &y), NULL);
 }
 
-/* ecrecover (S7 b4, USER ruling Q-S7-9, R17): closed arguments compute in
-   the host (front/secp256k1.c) with the 0x01 rules; a v other than 27 or 28,
-   an r or s of 0 or n or more and a failed recovery give the address 0
-   (R18). An open argument keeps the application stuck (opaque), so the
-   lowerer still emits the STATICCALL to 0x01. */
-static const Value *recover(Machine *m, const Value *const *a, uint32_t n) {
-  U256 v;
-  U256 *w;
-  if (a[0]->kind != VAL_WORD || a[1]->kind != VAL_NAT || a[2]->kind != VAL_WORD || a[3]->kind != VAL_WORD)
-    return opaque(m, OP_ECRECOVER, a, n);
-  w = arena_alloc(m->arena, sizeof *w);
-  if (w == NULL)
-    return oom(m);
-  u256_from_u64(&v, a[1]->nat);
-  secp_recover(w, a[0]->word, &v, a[2]->word, a[3]->word);
-  return val_word(m, WORD_ADDR, w);
-}
-
-/* The zk ops (S8 B2a): bLSAG over BN254 G1 in the host (front/blsag.c).
+/* The zk ops (S8 B2a): bLSAG over secp256k1 in the host (front/blsag.c).
    Closed arguments compute; an open argument keeps the application stuck
    (opaque). A ring that is empty or above BLSAG_RING_MAX members (O28), a
-   point off the curve or with a coordinate at or above p (the 0x07 revert,
-   R14, R18), a signer key that is zero, at or above r or outside the ring, and a key image
-   off the curve trap. */
+   point off the curve or with a coordinate at or above p (R14, R18), a
+   signer key that is zero, at or above n or outside the ring, and a key
+   image off the curve trap. */
 
 /* The trap among the arguments, or NULL. */
 static const Value *trap_arg(const Value *const *a, uint32_t n) {
@@ -1567,7 +1533,7 @@ static int closed_list(const Value *v, const Value **items, uint32_t cap, uint32
 
 /* Reads the ring A[0] into RING and *COUNT. Else *OUT is the stuck
    application (an open list or point) or the trap (a bad ring). */
-static int zk_ring(Machine *m, Op op, const Value *const *a, uint32_t n, G1 *ring, uint32_t *count, const Value **out) {
+static int zk_ring(Machine *m, Op op, const Value *const *a, uint32_t n, GroupPoint *ring, uint32_t *count, const Value **out) {
   const Value *items[BLSAG_RING_MAX + 1u];
   uint32_t i;
   if (!closed_list(a[0], items, BLSAG_RING_MAX, count, out)) {
@@ -1586,7 +1552,7 @@ static int zk_ring(Machine *m, Op op, const Value *const *a, uint32_t n, G1 *rin
     }
   }
   for (i = 0; i < *count; i++) {
-    if (!g1_from_words(&ring[i], items[i]->args[0]->word, items[i]->args[1]->word)) {
+    if (!group_from_words(&ring[i], items[i]->args[0]->word, items[i]->args[1]->word)) {
       *out = overflow(m);
       return 0;
     }
@@ -1597,8 +1563,8 @@ static int zk_ring(Machine *m, Op op, const Value *const *a, uint32_t n, G1 *rin
 /* zkHp P: the hash to point H_p(P). */
 static const Value *zk_hp(Machine *m, const Value *const *a, uint32_t n) {
   const Value *out = point_trap(a[0]);
-  G1 p;
-  G1 h;
+  GroupPoint p;
+  GroupPoint h;
   U256 x;
   U256 y;
   uint32_t counter = 0;
@@ -1606,13 +1572,13 @@ static const Value *zk_hp(Machine *m, const Value *const *a, uint32_t n) {
     return out;
   if (!closed_point(a[0]))
     return opaque(m, OP_ZK_HP, a, n);
-  if (!g1_from_words(&p, a[0]->args[0]->word, a[0]->args[1]->word) || !blsag_hash_point(&h, &counter, &p))
+  if (!group_from_words(&p, a[0]->args[0]->word, a[0]->args[1]->word) || !blsag_hash_point(&h, &counter, &p))
     return overflow(m);
-  g1_to_words(&x, &y, &h);
+  group_to_words(&x, &y, &h);
   return make(m, VAL_OP, OP_PAIR, 0, 2, word_value(m, &x), word_value(m, &y), NULL);
 }
 
-/* zkKey i: the test key hash(tag, i) mod r. */
+/* zkKey i: the test key hash(tag, i) mod n. */
 static const Value *zk_key(Machine *m, const Value *const *a, uint32_t n) {
   const Value *out = trap_arg(a, n);
   U256 w;
@@ -1627,7 +1593,7 @@ static const Value *zk_key(Machine *m, const Value *const *a, uint32_t n) {
 /* zkDigest ring: the ring digest D. */
 static const Value *zk_digest(Machine *m, const Value *const *a, uint32_t n) {
   const Value *out = trap_arg(a, n);
-  G1 ring[BLSAG_RING_MAX];
+  GroupPoint ring[BLSAG_RING_MAX];
   U256 d;
   uint32_t count = 0;
   if (out != NULL)
@@ -1641,7 +1607,7 @@ static const Value *zk_digest(Machine *m, const Value *const *a, uint32_t n) {
 /* zkSign ring x pollId choice: the list c_1, s_1 to s_n, I.x, I.y. */
 static const Value *zk_sign(Machine *m, const Value *const *a, uint32_t n) {
   const Value *out = trap_arg(a, n);
-  G1 ring[BLSAG_RING_MAX];
+  GroupPoint ring[BLSAG_RING_MAX];
   U256 sig[BLSAG_RING_MAX + 3u];
   uint32_t count = 0;
   uint32_t i;
@@ -1661,11 +1627,11 @@ static const Value *zk_sign(Machine *m, const Value *const *a, uint32_t n) {
 
 static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, const Value *const *a, uint32_t n);
 
-/* A G1 as a closed pair of words. */
-static const Value *zk_point_value(Machine *m, const G1 *p) {
+/* A GroupPoint as a closed pair of words. */
+static const Value *zk_point_value(Machine *m, const GroupPoint *p) {
   U256 x;
   U256 y;
-  g1_to_words(&x, &y, p);
+  group_to_words(&x, &y, p);
   return make(m, VAL_OP, OP_PAIR, 0, 2, word_value(m, &x), word_value(m, &y), NULL);
 }
 
@@ -1686,10 +1652,10 @@ static const Value *zk_node(Machine *m, Op op, const Value *a, const Value *b, c
    words of the term. The chain is the challenge fold of front/blsag.c: tag,
    D, poll id, choice, I.x, I.y, L.x, L.y, R.x, R.y. ITEMS holds c_1, s_1 to
    s_n, I.x, I.y. */
-static const Value *zk_unroll(Machine *m, const G1 *ring, uint32_t n, const Value *poll, const Value *choice, const Value *const *items) {
+static const Value *zk_unroll(Machine *m, const GroupPoint *ring, uint32_t n, const Value *poll, const Value *choice, const Value *const *items) {
   U256 w;
   U256 v;
-  G1 h;
+  GroupPoint h;
   uint32_t counter = 0;
   uint32_t i;
   const Value *g;
@@ -1700,8 +1666,8 @@ static const Value *zk_unroll(Machine *m, const G1 *ring, uint32_t n, const Valu
   const Value *img;
   const Value *c;
   const Value *out;
-  u256_from_u64(&w, 1u);
-  u256_from_u64(&v, 2u);
+  group_gen(&h);
+  group_to_words(&w, &v, &h);
   g = make(m, VAL_OP, OP_PAIR, 0, 2, word_value(m, &w), word_value(m, &v), NULL);
   tag = word_value(m, &BLSAG_TAG);
   blsag_digest(&w, ring, n);
@@ -1709,7 +1675,7 @@ static const Value *zk_unroll(Machine *m, const G1 *ring, uint32_t n, const Valu
   u256_from_u64(&w, 0u);
   zero = word_value(m, &w);
   for (i = 0; i < 4u; i++)
-    w.limb[i] = (uint64_t)BN254_FR.w[2u * i] | ((uint64_t)BN254_FR.w[2u * i + 1u] << 32);
+    w.limb[i] = (uint64_t)GROUP_N.w[2u * i] | ((uint64_t)GROUP_N.w[2u * i + 1u] << 32);
   u256_from_u64(&v, 1u);
   u256_sub(&w, &w, &v);
   rmax = word_value(m, &w);
@@ -1748,7 +1714,7 @@ static const Value *zk_unroll(Machine *m, const G1 *ring, uint32_t n, const Valu
 static const Value *zk_verify(Machine *m, const Value *const *a, uint32_t n) {
   const Value *out = trap_arg(a, n);
   const Value *items[BLSAG_RING_MAX + 4u];
-  G1 ring[BLSAG_RING_MAX];
+  GroupPoint ring[BLSAG_RING_MAX];
   U256 sig[BLSAG_RING_MAX + 3u];
   uint32_t count = 0;
   uint32_t len = 0;
@@ -1876,21 +1842,17 @@ int zk_index(const Machine *m, const Value *t, const Value *v, uint64_t *i) {
 }
 
 /* The member ring: P_k = G times the test key of member k, for k below
-   CARD (1 to BLSAG_RING_MAX). 0 when CARD is out of range or the generator
-   words (1, 2) give no point. */
-static int zk_member_ring(G1 *ring, uint64_t card) {
-  G1 gen;
-  U256 one;
-  U256 two;
+   CARD (1 to BLSAG_RING_MAX). 0 when CARD is out of range. */
+static int zk_member_ring(GroupPoint *ring, uint64_t card) {
+  GroupPoint gen;
   U256 key;
   uint32_t i;
-  u256_from_u64(&one, 1u);
-  u256_from_u64(&two, 2u);
-  if (card == 0 || card > BLSAG_RING_MAX || !g1_from_words(&gen, &one, &two))
+  if (card == 0 || card > BLSAG_RING_MAX)
     return 0;
+  group_gen(&gen);
   for (i = 0; i < (uint32_t)card; i++) {
     blsag_key(&key, i);
-    g1_mul(&ring[i], &gen, &key);
+    group_mul(&ring[i], &gen, &key);
   }
   return 1;
 }
@@ -1908,7 +1870,7 @@ static const Value *zk_cast(Machine *m, const Value *const *a, uint32_t n) {
    the member ring, the signer the member of the ballot, the choice word its
    constructor index. Shared by zkProve (poll id 0) and `langc prove`. */
 ZkWitnessVerdict zk_witness(Machine *m, const Value *b, const U256 *poll, U256 *choice, U256 *sig, uint32_t *n) {
-  G1 ring[BLSAG_RING_MAX];
+  GroupPoint ring[BLSAG_RING_MAX];
   U256 key;
   uint64_t card;
   uint64_t member;
@@ -1967,7 +1929,7 @@ static const Value *zk_project(Machine *m, const Value *const *a, uint32_t n) {
 static const Value *zk_check(Machine *m, const Value *const *a, uint32_t n) {
   const Value *out = trap_arg(a, n);
   const Value *items[BLSAG_RING_MAX + 5u];
-  G1 ring[BLSAG_RING_MAX];
+  GroupPoint ring[BLSAG_RING_MAX];
   U256 choice;
   U256 sig[BLSAG_RING_MAX + 3u];
   uint64_t card;
@@ -2664,10 +2626,8 @@ static const Value *transp_data(Machine *m, const Value *head, const Value *line
   case OP_NAT_MOD:
   case OP_FM_LEN:
   case OP_HASH:
-  case OP_ECRECOVER:
   case OP_EC_ADD:
   case OP_EC_MUL:
-  case OP_EC_PAIRING:
   case OP_ADDR_TO_U256:
   case OP_PROJ:
   case OP_KMAP_OF:
@@ -3664,10 +3624,6 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   case OP_EC_ADD:
   case OP_EC_MUL:
     return ec_op(m, op, a, n);
-  case OP_ECRECOVER:
-    return recover(m, a, n);
-  case OP_EC_PAIRING:
-    return opaque(m, op, a, n);
   case OP_ZK_HP:
     return zk_hp(m, a, n);
   case OP_ZK_KEY:

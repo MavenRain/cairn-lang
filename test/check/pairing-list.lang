@@ -1,2 +1,0 @@
--- TYPE_MISMATCH (slice S2, R17): ecPairing takes a List of (G1, G2) pairs, not a List U256.
-def wrong : Flag := ecPairing (cons 1u nil)

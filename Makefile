@@ -5,22 +5,23 @@ TCC ?= tcc
 CC ?= cc
 CFLAGS = -std=c99 -Wall -Werror -Isrc
 CLANG_FLAGS = -std=c99 -Wall -Wextra -Wswitch-enum -Werror -fsyntax-only -Isrc
-FRONT = src/front/base.c src/front/u256.c src/front/bn254.c src/front/secp256k1.c src/front/blsag.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/eval.c src/front/check.c src/keccak.c
+FRONT = src/front/base.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/eval.c src/front/check.c src/sha256.c
 SRC = src/main.c $(FRONT)
 FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c,$(FRONT))
-BLSAG_TOOL = test/blsagtool.c src/front/u256.c src/front/bn254.c src/front/blsag.c src/keccak.c
-ELGAMAL_TOOL = test/elgamaltool.c src/front/u256.c src/front/bn254.c src/front/blsag.c src/front/elgamal.c src/keccak.c
-THRESHOLD_TOOL = test/thresholdtool.c src/front/u256.c src/front/bn254.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/keccak.c
-SIGMA_TOOL = test/sigmatool.c src/front/u256.c src/front/bn254.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/sigma.c src/keccak.c
-BALLOT_TOOL = test/ballottool.c src/front/u256.c src/front/bn254.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/sigma.c src/keccak.c
-SECP_TOOL = test/secptool.c src/front/u256.c src/front/bn254.c src/front/secp256k1.c src/keccak.c
+BLSAG_TOOL = test/blsagtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/sha256.c
+ELGAMAL_TOOL = test/elgamaltool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/sha256.c
+THRESHOLD_TOOL = test/thresholdtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/sha256.c
+SIGMA_TOOL = test/sigmatool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/sigma.c src/sha256.c
+BALLOT_TOOL = test/ballottool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/sigma.c src/sha256.c
+SECP_TOOL = test/secptool.c src/front/u256.c src/front/field.c src/front/secp256k1.c
+SHA_TOOL = test/shatool.c src/sha256.c
 PATH_TOOL = test/pathtool.c $(filter-out src/front/front.c,$(FRONT))
 RUN_TOOL = test/runtool.c $(FRONT)
 HEADERS = $(wildcard src/*.h src/front/*.h)
 
 .PHONY: build check check-clang clean
 
-build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/sigmatool build/ballottool build/secptool build/pathtool build/runtool
+build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/sigmatool build/ballottool build/secptool build/shatool build/pathtool build/runtool
 
 build/domain.c: domain/domain.lang gen/embed.c
 	mkdir -p build
@@ -57,6 +58,10 @@ build/secptool: $(SECP_TOOL) $(HEADERS)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/secptool $(SECP_TOOL)
 
+build/shatool: $(SHA_TOOL) $(HEADERS)
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/shatool $(SHA_TOOL)
+
 build/pathtool: $(PATH_TOOL) $(HEADERS)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/pathtool $(PATH_TOOL)
@@ -73,10 +78,11 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(SIGMA_TOOL)
 	$(CC) $(CLANG_FLAGS) $(BALLOT_TOOL)
 	$(CC) $(CLANG_FLAGS) $(SECP_TOOL)
+	$(CC) $(CLANG_FLAGS) $(SHA_TOOL)
 	$(CC) $(CLANG_FLAGS) $(PATH_TOOL)
 	$(CC) $(CLANG_FLAGS) $(RUN_TOOL) build/domain.c
 
-check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/sigmatool build/ballottool build/secptool build/pathtool build/runtool check-clang
+check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/sigmatool build/ballottool build/secptool build/shatool build/pathtool build/runtool check-clang
 	sh test/gate.sh
 	sh test/run.sh
 	sh test/review.sh
@@ -87,6 +93,7 @@ check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thres
 	build/sigmatool
 	build/ballottool
 	build/secptool
+	build/shatool
 	build/pathtool
 	build/runtool
 

@@ -24,7 +24,7 @@ def pointEq : (p q : Prod U256 U256) -> Flag :=
 
 def dleqWith : (pkx pky cx cy dx dy ax ay bx by z e : U256) -> Flag :=
   fun (pkx pky cx cy dx dy ax ay bx by z e : U256) =>
-    flagIf (pointEq (ecMul (pair 1u 2u) z) (ecAdd (pair ax ay) (ecMul (pair pkx pky) e)))
+    flagIf (pointEq (ecMul (pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u) z) (ecAdd (pair ax ay) (ecMul (pair pkx pky) e)))
       (pointEq (ecMul (pair cx cy) z) (ecAdd (pair bx by) (ecMul (pair dx dy) e)))
       flagNo
 
@@ -33,7 +33,7 @@ def dleq : (pkx pky cx cy dx dy ax ay bx by z : U256) -> Flag :=
     dleqWith pkx pky cx cy dx dy ax ay bx by z (challenge pkx pky cx cy dx dy ax ay bx by)
 
 def opens : (ux uy vx vy n : U256) -> Flag :=
-  fun (ux uy vx vy n : U256) => pointEq (pair ux uy) (ecAdd (ecMul (pair 1u 2u) n) (pair vx vy))
+  fun (ux uy vx vy n : U256) => pointEq (pair ux uy) (ecAdd (ecMul (pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u) n) (pair vx vy))
 
 -- One DLEQ proof: 4 ecMul, 2 ecAdd, 10 hash.
 def dleqOk : (env : Env) -> (s : State) -> (pkx pky cx cy dx dy ax ay bx by z : U256) -> Flag :=
@@ -51,22 +51,22 @@ def openOk : (env : Env) -> (s : State) -> (ux uy vx vy n : U256) -> Flag :=
   fun (env : Env) (s : State) (ux uy vx vy n : U256) => opens ux uy vx vy n
 
 -- The host words (closed: the evaluator computes the curve ops and hashes).
-def pk1x : U256 := 0x1f8998908f24942c91e985c7d47ef1a72c4b50225e2eab95d035b5f35d266fb6u
-def pk1y : U256 := 0x08e06bf52945ba6717f9228de2d3dba0ca205f0725120f2da2b61c3eaab51797u
-def c1x : U256 := 0x06107e6b6511db3eb78edf5b81e309c1ce2d43ffc1f99878add70ec94232f5bdu
-def c1y : U256 := 0x0c417387621eb1e2f78895cafc1ba63b3141ad838c1718913898a716e2513dccu
-def d1x : U256 := 0x25c1f7b394999d8fb70dff84f4bcc6315445533a3ddc6cd2075111363b987422u
-def d1y : U256 := 0x10bfba20e712970a914f6792b77ce1bd500fc1ec966107759a7c4870dbfbfff8u
-def a1x : U256 := 0x1caead4e0da42c1d4db0d09ce41d43f5538a8087c752bcc266b550ba530d593cu
-def a1y : U256 := 0x2cfbc233ebdfb0af1d6404d3081c9a7fea2878dcc855030affac01152287c93au
-def b1x : U256 := 0x0248fe02c6a21f55aff1f6667808aa65978ad670f286d99420a02db797db175eu
-def b1y : U256 := 0x0c78621e9e0babfefd760556856aed8940676de5f747157cdfd050e24d54c343u
-def z1 : U256 := 0x08fad840104489f5dc19df835b78abe11a9eb08068adb6954a52ed9dddafd5a3u
-def z1bad : U256 := 0x08fad840104489f5dc19df835b78abe11a9eb08068adb6954a52ed9dddafd5a4u
-def kx : U256 := 0x24347111ca7ece60147a3c9f770e870aae28c84db57202855318ed8ce2808016u
-def ky : U256 := 0x230ffa7d4bbc30d27d9eeba70a08008b72b6334751005274ac8aeb5c8fe4d19du
-def c2x : U256 := 0x1bfeca9f35b9d24a06420451a37fff41a575a6e5ecf0d4a054d0120d08627aeeu
-def c2y : U256 := 0x1d482f62e329fc2ee7c5579e6296989e50fc6b3f68ba6db6b4e20b4914552627u
+def pk1x : U256 := 0x05b9c08ff8a12a868bfde19b5df1e989f5ad9e4d69d426e343261100e2f75683u
+def pk1y : U256 := 0xb6ead4f3d466575e9d3f9feccda1a8bf51556d4f0fff685244c006af83c928a6u
+def c1x : U256 := 0xa39dcfcb2de53f5c6a94fe755a1ed41680285350c2d31b9936834b032627b2beu
+def c1y : U256 := 0x88600a13e957d1db6e55d07fe9dbf0009512fe0a44e2c6c409d57199d74161bcu
+def d1x : U256 := 0xeb267dd8333c8d9e0a153fbbd6e770b489f1df0e99e291577d8feceeb6a3f24bu
+def d1y : U256 := 0x3d62f3f81d779d6a99f10bfc9f8cdfaf698c7a6fbb8a0c798411e0eabb748632u
+def a1x : U256 := 0x22ad1bdcf99933dab50113a21983c25a16618d048d8bf0dd437e500a4a704a57u
+def a1y : U256 := 0x587fc8a68f08ebae86f73f2b19cb17e87d8d94532c0c971e54a01159b5aca425u
+def b1x : U256 := 0xe753e00e8a10e1ae942fcd36b8950ed3a01f2f900c588fe3ce7d3902425efd34u
+def b1y : U256 := 0xd0541b95f03973b5497da32650aa54b6a6d680899dbbe4855f00a7591e5b8b02u
+def z1 : U256 := 0xdc5dc592882595fbec40f98df335cf8b0d5f9bbcf2b3e75f88a8625f6509ea61u
+def z1bad : U256 := 0xdc5dc592882595fbec40f98df335cf8b0d5f9bbcf2b3e75f88a8625f6509ea62u
+def kx : U256 := 0xd9045c59c01d95429da9a07a1d45a2b94dba90a20ee1a4c843cc95ddce37daf1u
+def ky : U256 := 0xfb3aab7fc3d410a311a820ccf56d7fcefd5529a057299dad966fc35de406d3c9u
+def c2x : U256 := 0x309681fc47f238456d8f22ac1a7f24c69d34e0901c2c035602c3ac8e7ccb8189u
+def c2y : U256 := 0x1fb55734602b6493d56f85bd8fde6a83931c64253d1cca04947324de616689d2u
 def m : U256 := 0x00000000000000000000000000000000000000000000000000000000000004d2u
 def dleqGood : Flag := dleq pk1x pk1y c1x c1y d1x d1y a1x a1y b1x b1y z1
 def dleqBad : Flag := dleq pk1x pk1y c1x c1y d1x d1y a1x a1y b1x b1y z1bad

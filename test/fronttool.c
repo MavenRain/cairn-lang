@@ -222,10 +222,9 @@ static int prove_output(int trap, int broken, const char *poll) {
       ok = ok && fgets(text, sizeof text, err) != NULL
         && strncmp(text, "langc: EVAL_OVERFLOW: b:", 23u) == 0;
     } else {
-      G1 gen;
-      G1 ring;
+      GroupPoint gen;
+      GroupPoint ring;
       U256 one;
-      U256 two;
       U256 key;
       U256 poll_word;
       U256 wrong_poll;
@@ -236,14 +235,13 @@ static int prove_output(int trap, int broken, const char *poll) {
         ok = tokens.items[i].kind == TOK_WORD && tokens.items[i].nat == WORD_U256
           && tokens.items[i].line == (int)i + 1;
       u256_from_u64(&one, 1u);
-      u256_from_u64(&two, 2u);
       u256_from_u64(&poll_word, poll == NULL ? 0u : 7u);
       u256_from_u64(&wrong_poll, poll == NULL ? 7u : 0u);
-      ok = ok && u256_cmp(&tokens.items[0].word, &one) == 0
-        && g1_from_words(&gen, &one, &two);
+      ok = ok && u256_cmp(&tokens.items[0].word, &one) == 0;
+      group_gen(&gen);
       if (ok) {
         blsag_key(&key, 0u);
-        g1_mul(&ring, &gen, &key);
+        group_mul(&ring, &gen, &key);
         for (uint32_t i = 0; i < 4u; i++) sig[i] = tokens.items[i + 1u].word;
         ok = blsag_verify(&ring, 1u, &poll_word, &one, sig) == BLSAG_ACCEPT
           && blsag_verify(&ring, 1u, &wrong_poll, &one, sig) == BLSAG_REJECT;

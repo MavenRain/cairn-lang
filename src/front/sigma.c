@@ -44,16 +44,16 @@ static void wrap_sub(U256 *out, const U256 *a, const U256 *b) {
 }
 
 /* ACC = thr_hash(thr_hash(ACC, P.x), P.y). */
-static void absorb(U256 *acc, const G1 *p) {
+static void absorb(U256 *acc, const GroupPoint *p) {
   U256 x;
   U256 y;
-  g1_to_words(&x, &y, p);
+  group_to_words(&x, &y, p);
   thr_hash(acc, acc, &x);
   thr_hash(acc, acc, &y);
 }
 
 /* The chain of thr_hash from TAG over the secret X, CTX, PK, C1 and C2. */
-static void secret_chain(U256 *out, const U256 *tag, const U256 *x, const U256 *ctx, const G1 *pk, const ElgCipher *ct) {
+static void secret_chain(U256 *out, const U256 *tag, const U256 *x, const U256 *ctx, const GroupPoint *pk, const ElgCipher *ct) {
   thr_hash(out, tag, x);
   thr_hash(out, out, ctx);
   absorb(out, pk);
@@ -68,7 +68,7 @@ static void draw(U256 *out, const U256 *base, uint64_t i) {
   thr_hash(out, base, &w);
 }
 
-/* z = w + (e mod r) x mod r, as thr_partial. */
+/* z = w + (e mod n) x mod n, as thr_partial. */
 static void respond(U256 *z, const U256 *w, const U256 *e, const U256 *x) {
   U256 er;
   Fe fw;
@@ -77,30 +77,30 @@ static void respond(U256 *z, const U256 *w, const U256 *e, const U256 *x) {
   Fe ex;
   Fe fz;
   blsag_reduce(&er, e);
-  fe_from_u256(&fw, w, &BN254_FR);
-  fe_from_u256(&fe, &er, &BN254_FR);
-  fe_from_u256(&fx, x, &BN254_FR);
-  fe_mul(&ex, &fe, &fx, &BN254_FR);
-  fe_add(&fz, &fw, &ex, &BN254_FR);
+  fe_from_u256(&fw, w, &GROUP_N);
+  fe_from_u256(&fe, &er, &GROUP_N);
+  fe_from_u256(&fx, x, &GROUP_N);
+  fe_mul(&ex, &fe, &fx, &GROUP_N);
+  fe_add(&fz, &fw, &ex, &GROUP_N);
   fe_to_u256(z, &fz);
 }
 
 /* 1 when z P = A + e Q. */
-static int eq_holds(const U256 *z, const G1 *p, const G1 *a, const U256 *e, const G1 *q) {
-  G1 l;
-  G1 r;
-  g1_mul(&l, p, z);
-  g1_mul(&r, q, e);
-  g1_add(&r, a, &r);
-  return g1_eq(&l, &r);
+static int eq_holds(const U256 *z, const GroupPoint *p, const GroupPoint *a, const U256 *e, const GroupPoint *q) {
+  GroupPoint l;
+  GroupPoint r;
+  group_mul(&l, p, z);
+  group_mul(&r, q, e);
+  group_add(&r, a, &r);
+  return group_eq(&l, &r);
 }
 
-static int ct_on_curve(const G1 *pk, const ElgCipher *ct) {
-  return g1_on_curve(pk) && g1_on_curve(&ct->c1) && g1_on_curve(&ct->c2);
+static int ct_on_curve(const GroupPoint *pk, const ElgCipher *ct) {
+  return group_on_curve(pk) && group_on_curve(&ct->c1) && group_on_curve(&ct->c2);
 }
 
 static int or_on_curve(const SigOr *proof) {
-  return g1_on_curve(&proof->a0) && g1_on_curve(&proof->b0) && g1_on_curve(&proof->a1) && g1_on_curve(&proof->b1);
+  return group_on_curve(&proof->a0) && group_on_curve(&proof->b0) && group_on_curve(&proof->a1) && group_on_curve(&proof->b1);
 }
 
 /* The pointwise sum of the K >= 1 ciphertexts CTS. */
@@ -111,16 +111,16 @@ static void ballot_sum(ElgCipher *out, const ElgCipher *cts, uint32_t k) {
     elg_add(out, out, &cts[j]);
 }
 
-void sig_plain(G1 *out, const ElgCipher *ct, const U256 *m) {
-  G1 g;
-  G1 mg;
+void sig_plain(GroupPoint *out, const ElgCipher *ct, const U256 *m) {
+  GroupPoint g;
+  GroupPoint mg;
   elg_generator(&g);
-  g1_mul(&mg, &g, m);
-  g1_neg(&mg, &mg);
-  g1_add(out, &ct->c2, &mg);
+  group_mul(&mg, &g, m);
+  group_neg(&mg, &mg);
+  group_add(out, &ct->c2, &mg);
 }
 
-void sig_rand_challenge(U256 *e, const G1 *pk, const ElgCipher *ct, const U256 *m, const G1 *a, const G1 *b, const U256 *ctx) {
+void sig_rand_challenge(U256 *e, const GroupPoint *pk, const ElgCipher *ct, const U256 *m, const GroupPoint *a, const GroupPoint *b, const U256 *ctx) {
   thr_hash(e, &RAND_TAG, ctx);
   absorb(e, pk);
   absorb(e, &ct->c1);
@@ -130,7 +130,7 @@ void sig_rand_challenge(U256 *e, const G1 *pk, const ElgCipher *ct, const U256 *
   absorb(e, b);
 }
 
-void sig_or_challenge(U256 *e, const G1 *pk, const ElgCipher *ct, const SigOr *proof, const U256 *ctx, uint32_t j) {
+void sig_or_challenge(U256 *e, const GroupPoint *pk, const ElgCipher *ct, const SigOr *proof, const U256 *ctx, uint32_t j) {
   U256 slot;
   u256_from_u64(&slot, j);
   thr_hash(e, &ONEHOT_TAG, ctx);
@@ -144,26 +144,26 @@ void sig_or_challenge(U256 *e, const G1 *pk, const ElgCipher *ct, const SigOr *p
   absorb(e, &proof->b1);
 }
 
-void sig_simulate(G1 *a, G1 *b, const G1 *pk, const G1 *c1, const G1 *y, const U256 *e, const U256 *z) {
-  G1 g;
-  G1 t;
-  G1 u;
+void sig_simulate(GroupPoint *a, GroupPoint *b, const GroupPoint *pk, const GroupPoint *c1, const GroupPoint *y, const U256 *e, const U256 *z) {
+  GroupPoint g;
+  GroupPoint t;
+  GroupPoint u;
   elg_generator(&g);
-  g1_mul(&t, &g, z);
-  g1_mul(&u, c1, e);
-  g1_neg(&u, &u);
-  g1_add(a, &t, &u);
-  g1_mul(&t, pk, z);
-  g1_mul(&u, y, e);
-  g1_neg(&u, &u);
-  g1_add(b, &t, &u);
+  group_mul(&t, &g, z);
+  group_mul(&u, c1, e);
+  group_neg(&u, &u);
+  group_add(a, &t, &u);
+  group_mul(&t, pk, z);
+  group_mul(&u, y, e);
+  group_neg(&u, &u);
+  group_add(b, &t, &u);
 }
 
-SigResult sig_rand_prove(SigDleq *out, const G1 *pk, const ElgCipher *ct, const U256 *m, const U256 *r, const U256 *ctx) {
+SigResult sig_rand_prove(SigDleq *out, const GroupPoint *pk, const ElgCipher *ct, const U256 *m, const U256 *r, const U256 *ctx) {
   U256 rr;
   U256 w;
   U256 e;
-  G1 g;
+  GroupPoint g;
   if (!ct_on_curve(pk, ct))
     return SIG_REFUSED;
   blsag_reduce(&rr, r);
@@ -171,18 +171,18 @@ SigResult sig_rand_prove(SigDleq *out, const G1 *pk, const ElgCipher *ct, const 
   thr_hash(&w, &w, m);
   blsag_reduce(&w, &w);
   elg_generator(&g);
-  g1_mul(&out->a, &g, &w);
-  g1_mul(&out->b, pk, &w);
+  group_mul(&out->a, &g, &w);
+  group_mul(&out->b, pk, &w);
   sig_rand_challenge(&e, pk, ct, m, &out->a, &out->b, ctx);
   respond(&out->z, &w, &e, &rr);
   return SIG_OK;
 }
 
-SigResult sig_rand_verify(const SigDleq *proof, const G1 *pk, const ElgCipher *ct, const U256 *m, const U256 *ctx) {
+SigResult sig_rand_verify(const SigDleq *proof, const GroupPoint *pk, const ElgCipher *ct, const U256 *m, const U256 *ctx) {
   U256 e;
-  G1 g;
-  G1 v;
-  if (!ct_on_curve(pk, ct) || !g1_on_curve(&proof->a) || !g1_on_curve(&proof->b))
+  GroupPoint g;
+  GroupPoint v;
+  if (!ct_on_curve(pk, ct) || !group_on_curve(&proof->a) || !group_on_curve(&proof->b))
     return SIG_REFUSED;
   elg_generator(&g);
   sig_plain(&v, ct, m);
@@ -196,10 +196,10 @@ SigResult sig_rand_verify(const SigDleq *proof, const G1 *pk, const ElgCipher *c
   return SIG_OK;
 }
 
-SigResult sig_or_prove(SigOr *out, const G1 *pk, const ElgCipher *ct, uint32_t bit, const U256 *r, const U256 *ctx, uint32_t j) {
-  G1 y[2];
-  G1 a[2];
-  G1 b[2];
+SigResult sig_or_prove(SigOr *out, const GroupPoint *pk, const ElgCipher *ct, uint32_t bit, const U256 *r, const U256 *ctx, uint32_t j) {
+  GroupPoint y[2];
+  GroupPoint a[2];
+  GroupPoint b[2];
   U256 e[2];
   U256 z[2];
   U256 m;
@@ -207,7 +207,7 @@ SigResult sig_or_prove(SigOr *out, const G1 *pk, const ElgCipher *ct, uint32_t b
   U256 base;
   U256 w;
   U256 ch;
-  G1 g;
+  GroupPoint g;
   uint32_t s;
   if (bit > 1u || !ct_on_curve(pk, ct))
     return SIG_REFUSED;
@@ -226,8 +226,8 @@ SigResult sig_or_prove(SigOr *out, const G1 *pk, const ElgCipher *ct, uint32_t b
   draw(&z[s], &base, 2u);
   blsag_reduce(&z[s], &z[s]);
   elg_generator(&g);
-  g1_mul(&a[bit], &g, &w);
-  g1_mul(&b[bit], pk, &w);
+  group_mul(&a[bit], &g, &w);
+  group_mul(&b[bit], pk, &w);
   sig_simulate(&a[s], &b[s], pk, &ct->c1, &y[s], &e[s], &z[s]);
   out->a0 = a[0];
   out->b0 = b[0];
@@ -243,12 +243,12 @@ SigResult sig_or_prove(SigOr *out, const G1 *pk, const ElgCipher *ct, uint32_t b
   return SIG_OK;
 }
 
-SigResult sig_or_verify(const SigOr *proof, const G1 *pk, const ElgCipher *ct, const U256 *ctx, uint32_t j) {
+SigResult sig_or_verify(const SigOr *proof, const GroupPoint *pk, const ElgCipher *ct, const U256 *ctx, uint32_t j) {
   U256 ch;
   U256 sum;
   U256 one;
-  G1 g;
-  G1 d;
+  GroupPoint g;
+  GroupPoint d;
   if (!ct_on_curve(pk, ct) || !or_on_curve(proof))
     return SIG_REFUSED;
   sig_or_challenge(&ch, pk, ct, proof, ctx, j);
@@ -265,7 +265,7 @@ SigResult sig_or_verify(const SigOr *proof, const G1 *pk, const ElgCipher *ct, c
   return SIG_OK;
 }
 
-SigResult sig_onehot_prove(ElgCipher *cts, SigOr *slots, SigDleq *sum, const G1 *pk, uint32_t k, uint32_t choice, const U256 *seed, const U256 *ctx) {
+SigResult sig_onehot_prove(ElgCipher *cts, SigOr *slots, SigDleq *sum, const GroupPoint *pk, uint32_t k, uint32_t choice, const U256 *seed, const U256 *ctx) {
   U256 domain;
   U256 r;
   U256 m;
@@ -276,7 +276,7 @@ SigResult sig_onehot_prove(ElgCipher *cts, SigOr *slots, SigDleq *sum, const G1 
   ElgCipher total;
   uint32_t bit;
   uint32_t j;
-  if (k < 1u || k > SIG_K_MAX || choice >= k || !g1_on_curve(pk))
+  if (k < 1u || k > SIG_K_MAX || choice >= k || !group_on_curve(pk))
     return SIG_REFUSED;
   thr_hash(&domain, &BALLOT_TAG, seed);
   fe_from_u64(&acc, 0u);
@@ -287,8 +287,8 @@ SigResult sig_onehot_prove(ElgCipher *cts, SigOr *slots, SigDleq *sum, const G1 
     u256_from_u64(&m, bit);
     elg_encrypt(&cts[j], pk, &m, &r);
     sig_or_prove(&slots[j], pk, &cts[j], bit, &r, ctx, j);
-    fe_from_u256(&fr, &r, &BN254_FR);
-    fe_add(&next, &acc, &fr, &BN254_FR);
+    fe_from_u256(&fr, &r, &GROUP_N);
+    fe_add(&next, &acc, &fr, &GROUP_N);
     acc = next;
   }
   fe_to_u256(&total_r, &acc);
@@ -297,11 +297,11 @@ SigResult sig_onehot_prove(ElgCipher *cts, SigOr *slots, SigDleq *sum, const G1 
   return sig_rand_prove(sum, pk, &total, &m, &total_r, ctx);
 }
 
-SigResult sig_onehot_verify(const ElgCipher *cts, const SigOr *slots, const SigDleq *sum, const G1 *pk, uint32_t k, const U256 *ctx) {
+SigResult sig_onehot_verify(const ElgCipher *cts, const SigOr *slots, const SigDleq *sum, const GroupPoint *pk, uint32_t k, const U256 *ctx) {
   ElgCipher total;
   U256 one;
   uint32_t j;
-  if (k < 1u || k > SIG_K_MAX || !g1_on_curve(pk) || !g1_on_curve(&sum->a) || !g1_on_curve(&sum->b))
+  if (k < 1u || k > SIG_K_MAX || !group_on_curve(pk) || !group_on_curve(&sum->a) || !group_on_curve(&sum->b))
     return SIG_REFUSED;
   for (j = 0; j < k; j++)
     if (!ct_on_curve(pk, &cts[j]) || !or_on_curve(&slots[j]))

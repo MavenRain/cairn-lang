@@ -1,10 +1,10 @@
-/* Threshold opening of exponential ElGamal over BN254 G1 in the host
+/* Threshold opening of exponential ElGamal over secp256k1 in the host
    (docs/PLAN.md section 9, slice S6 b1, Q-S6-3 (a) and Q-S6-4 (a)). Not
    guest visible: the guest keeps the public part of a quorum (`Quorum`) and
    the law `open q c = decrypt c` (docs/SPEC.md rule O7); this file is a
    host model of the scheme under it.
 
-   A trusted dealer splits the key sk by Shamir over Fr (t of n, x_i = i).
+   A trusted dealer splits the key sk by Shamir mod GROUP_N (t of n, x_i = i).
    The holder of share i gives the partial decryption D_i = s_i C1 with a
    Chaum-Pedersen proof (A, B, z) that log_G PK_i = log_C1 D_i. Any t parts
    with good proofs give sk C1 = sum lambda_i D_i (Lagrange in the exponent
@@ -12,7 +12,7 @@
    distributed key generation that would replace it are VALIDATION
    assumptions.
 
-   The challenge e is the hash chain of the guest `hash a b` (keccak256 of
+   The challenge e is the hash chain of the guest `hash a b` (SHA-256 of
    the 64 big endian bytes of a and b) from DLEQ_TAG over the ten point
    words, as a raw word: the view dleqOk of examples/threshold.lang computes
    the same chain on the chain (ecMul, ecAdd, hash and u256Eq only). */
@@ -21,7 +21,7 @@
 
 #include <stdint.h>
 
-#include "front/bn254.h"
+#include "front/group.h"
 #include "front/elgamal.h"
 #include "front/u256.h"
 
@@ -38,16 +38,16 @@ extern const U256 DLEQ_NONCE_TAG;
 typedef struct {
   uint32_t x;
   U256 s;
-  G1 key;
+  GroupPoint key;
 } ThrShare;
 
 /* The partial decryption of share x for one ciphertext and its proof. */
 typedef struct {
   uint32_t x;
-  G1 d; /* s C1 */
-  G1 a; /* w G */
-  G1 b; /* w C1 */
-  U256 z; /* w + e s mod r */
+  GroupPoint d; /* s C1 */
+  GroupPoint a; /* w G */
+  GroupPoint b; /* w C1 */
+  U256 z; /* w + e s mod GROUP_N */
 } ThrPart;
 
 typedef enum {
@@ -60,13 +60,13 @@ typedef enum {
   THR_NO_MEMORY  /* no memory for the baby step table */
 } ThrResult;
 
-/* keccak256 of the 64 big endian bytes of A and B: the guest `hash a b`.
+/* SHA-256 of the 64 big endian bytes of A and B: the guest `hash a b`.
    OUT can be A or B. */
 void thr_hash(U256 *out, const U256 *a, const U256 *b);
 /* The challenge e: the chain of thr_hash from DLEQ_TAG over KEY.x, KEY.y,
    C1.x, C1.y, D.x, D.y, A.x, A.y, B.x, B.y (10 hashes), not reduced. */
-void thr_challenge(U256 *e, const G1 *key, const G1 *c1, const G1 *d, const G1 *a, const G1 *b);
-/* The private coefficient a_k = hash(hash(THR_TAG, SEED), k) mod r.
+void thr_challenge(U256 *e, const GroupPoint *key, const GroupPoint *c1, const GroupPoint *d, const GroupPoint *a, const GroupPoint *b);
+/* The private coefficient a_k = hash(hash(THR_TAG, SEED), k) mod GROUP_N.
    SEED is fresh secret 256-bit entropy, independent of SK, for each deal.
    Keep it private from shareholders, including after the deal. */
 void thr_nonce(U256 *out, const U256 *seed, uint64_t k);
@@ -74,17 +74,18 @@ void thr_nonce(U256 *out, const U256 *seed, uint64_t k);
    public key sk G, using the private SEED described above. Public or reused
    coefficient entropy lets a single shareholder recover SK. Fixed seeds
    are for test vectors only. 1, or 0 unless
-   1 <= T <= N <= THR_N_MAX and SK < r. */
-int thr_deal(ThrShare *shares, G1 *pk, const U256 *sk, const U256 *seed, uint32_t t, uint32_t n);
+   1 <= T <= N <= THR_N_MAX and SK < GROUP_N. */
+int thr_deal(ThrShare *shares, GroupPoint *pk, const U256 *sk, const U256 *seed, uint32_t t, uint32_t n);
 /* The part of SHARE for CT, with the nonce w = hash chain of
-   DLEQ_NONCE_TAG, s, C1.x, C1.y mod r: one w per share and ciphertext. CT
-   must be on the curve. */
+   DLEQ_NONCE_TAG, s, C1.x, C1.y mod GROUP_N: one w per share and
+   ciphertext. CT must be on the curve. */
 void thr_partial(ThrPart *out, const ThrShare *share, const ElgCipher *ct);
 /* 1 when z G = A + e KEY and z C1 = B + e D, with e = thr_challenge. Each
    point must be on the curve (thr_open tests them). */
-int thr_verify(const ThrPart *part, const G1 *key, const ElgCipher *ct);
+int thr_verify(const ThrPart *part, const GroupPoint *key, const ElgCipher *ct);
 /* lambda_i at 0 for the set of the K part indices: the product over j != I
-   of x_j / (x_j - x_i) over Fr. The indices must be distinct and nonzero. */
+   of x_j / (x_j - x_i) mod GROUP_N. The indices must be distinct and
+   nonzero. */
 void thr_lagrange(U256 *out, const ThrPart *parts, uint32_t k, uint32_t i);
 /* The m below 2^BITS of CT from K parts, with KEYS[x - 1] = PK_x for the N
    shares and the threshold T. In order: THR_REFUSED, THR_TOO_FEW,
@@ -92,6 +93,6 @@ void thr_lagrange(U256 *out, const ThrPart *parts, uint32_t k, uint32_t i);
    gives a wrong sum without an error), THR_BAD_PROOF, then the result of
    elg_log on C2 - sum lambda_i D_i. A K above T uses all K parts. *M gets m
    on THR_FOUND. */
-ThrResult thr_open(uint64_t *m, const ThrPart *parts, uint32_t k, const G1 *keys, uint32_t t, uint32_t n, const ElgCipher *ct, uint32_t bits);
+ThrResult thr_open(uint64_t *m, const ThrPart *parts, uint32_t k, const GroupPoint *keys, uint32_t t, uint32_t n, const ElgCipher *ct, uint32_t bits);
 
 #endif

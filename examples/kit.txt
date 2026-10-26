@@ -26,7 +26,7 @@ equiv.lang
 glue.lang
 univ.lang
 elim.lang
-bn254.lang
+secp256k1.lang
 zk.lang
 zkcast.lang
 enc-ideal.lang

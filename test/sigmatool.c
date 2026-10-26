@@ -24,16 +24,16 @@ static void word(const char *prefix, const char *name, const U256 *w) {
          (unsigned long long)w->limb[1], (unsigned long long)w->limb[0]);
 }
 
-static void point(const char *prefix, const char *x, const char *y, const G1 *p) {
+static void point(const char *prefix, const char *x, const char *y, const GroupPoint *p) {
   U256 a;
   U256 b;
-  g1_to_words(&a, &b, p);
+  group_to_words(&a, &b, p);
   word(prefix, x, &a);
   word(prefix, y, &b);
 }
 
 /* The ciphertext of M under PK with the nonce r_I; *R gets r_I. */
-static void encrypt_u64(ElgCipher *out, U256 *r, const G1 *pk, uint64_t m, uint64_t i) {
+static void encrypt_u64(ElgCipher *out, U256 *r, const GroupPoint *pk, uint64_t m, uint64_t i) {
   U256 w;
   u256_from_u64(&w, m);
   elg_nonce(r, i);
@@ -43,9 +43,9 @@ static void encrypt_u64(ElgCipher *out, U256 *r, const G1 *pk, uint64_t m, uint6
 /* A bit proof for CT with both branches simulated from fixed words: each of
    the four equations holds and e0 + e1 is not e, so only the split check
    refuses it. On an encryption of 2 it would prove a non-bit. */
-static void forge(SigOr *out, const G1 *pk, const ElgCipher *ct) {
+static void forge(SigOr *out, const GroupPoint *pk, const ElgCipher *ct) {
   U256 one;
-  G1 d;
+  GroupPoint d;
   blsag_key(&out->e0, 31u);
   blsag_key(&out->e1, 32u);
   blsag_key(&out->z0, 33u);
@@ -58,7 +58,7 @@ static void forge(SigOr *out, const G1 *pk, const ElgCipher *ct) {
 
 /* The honest ballot for CHOICE of K: proved, verified, and each slot opens
    to its bit. */
-static int onehot_good(const char *name, const U256 *sk, const G1 *pk, uint32_t k, uint32_t choice, const U256 *seed, const U256 *ctx) {
+static int onehot_good(const char *name, const U256 *sk, const GroupPoint *pk, uint32_t k, uint32_t choice, const U256 *seed, const U256 *ctx) {
   ElgCipher cts[SIG_K_MAX];
   SigOr slots[SIG_K_MAX];
   SigDleq sum;
@@ -78,7 +78,7 @@ static int onehot_good(const char *name, const U256 *sk, const G1 *pk, uint32_t 
 /* Two slots that encrypt B0 and B1, each with a good bit proof, and the
    proof of randomness of the sum for m = 1 with the sum of the nonces: the
    sum proof fails unless B0 + B1 = 1. */
-static int onehot_bad_sum(const char *name, const G1 *pk, uint32_t b0, uint32_t b1, const U256 *ctx) {
+static int onehot_bad_sum(const char *name, const GroupPoint *pk, uint32_t b0, uint32_t b1, const U256 *ctx) {
   ElgCipher cts[2];
   SigOr slots[2];
   SigDleq sum;
@@ -97,9 +97,9 @@ static int onehot_bad_sum(const char *name, const G1 *pk, uint32_t b0, uint32_t 
   if (!expect(name, sig_or_verify(&slots[0], pk, &cts[0], ctx, 0u), SIG_OK)
       || !expect(name, sig_or_verify(&slots[1], pk, &cts[1], ctx, 1u), SIG_OK))
     return 0;
-  fe_from_u256(&f0, &r0, &BN254_FR);
-  fe_from_u256(&f1, &r1, &BN254_FR);
-  fe_add(&fs, &f0, &f1, &BN254_FR);
+  fe_from_u256(&f0, &r0, &GROUP_N);
+  fe_from_u256(&f1, &r1, &GROUP_N);
+  fe_add(&fs, &f0, &f1, &GROUP_N);
   fe_to_u256(&rs, &fs);
   elg_add(&total, &cts[0], &cts[1]);
   u256_from_u64(&one, 1u);
@@ -124,7 +124,7 @@ static void slot_words(const char *prefix, const ElgCipher *ct, const SigOr *s) 
    encrypts 1), its sum and sum proof (m = 1, and z + 1 for the bad row),
    -G, and the forged slot 0 on an encryption of 2. 1 when a proof does not
    verify as the chain rows expect. */
-static int words(const G1 *pk, const U256 *seed, const U256 *ctx) {
+static int words(const GroupPoint *pk, const U256 *seed, const U256 *ctx) {
   ElgCipher cts[2];
   SigOr slots[2];
   SigDleq sum;
@@ -134,7 +134,7 @@ static int words(const G1 *pk, const U256 *seed, const U256 *ctx) {
   U256 r;
   U256 one;
   U256 bad;
-  G1 g;
+  GroupPoint g;
   if (sig_onehot_prove(cts, slots, &sum, pk, 2u, 1u, seed, ctx) != SIG_OK || sig_onehot_verify(cts, slots, &sum, pk, 2u, ctx) != SIG_OK) {
     fputs("FAIL sigma words: the ballot does not verify\n", stderr);
     return 1;
@@ -148,7 +148,7 @@ static int words(const G1 *pk, const U256 *seed, const U256 *ctx) {
   word("", "ctx", ctx);
   point("", "pkx", "pky", pk);
   elg_generator(&g);
-  g1_neg(&g, &g);
+  group_neg(&g, &g);
   point("", "negGx", "negGy", &g);
   slot_words("s0", &cts[0], &slots[0]);
   slot_words("s1", &cts[1], &slots[1]);
@@ -180,7 +180,7 @@ int main(int argc, char **argv) {
   U256 r0;
   U256 r1;
   U256 r2;
-  G1 pk;
+  GroupPoint pk;
   ElgCipher ct;
   ElgCipher off;
   ElgCipher c0;

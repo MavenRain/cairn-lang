@@ -66,17 +66,15 @@ typedef enum {
   OP_U256_EQ,
   OP_TO_U256,
   OP_ADDR_EQ,
-  /* sealed-lang S2 (R14, R16 to R18, R20): the base span. The curve ops
-     ECRECOVER, EC_ADD, EC_MUL and EC_PAIRING are opaque in the evaluator
-     and exact on the EVM (precompiles 1, 6, 7, 8). */
+  /* sealed-lang S2 (R14, R16 to R18, R20): the base span. EC_ADD and EC_MUL
+     compute on secp256k1 in the host (slice S4 removed ECRECOVER and
+     EC_PAIRING). */
   OP_NAT_DIV,
   OP_NAT_MOD,
   OP_FM_LEN, /* S3: len A r, the op count of a FreeMon trace (survey section 7) */
   OP_HASH,
-  OP_ECRECOVER,
   OP_EC_ADD,
   OP_EC_MUL,
-  OP_EC_PAIRING,
   OP_ADDR_TO_U256,
   OP_PROJ,
   /* Slice K4a0: Map K V, the map value (k0 v0 k1 v1 ... with the keys in
@@ -85,7 +83,7 @@ typedef enum {
   OP_KMAP_OF,
   OP_KMAP_GET,
   OP_KMAP_SET,
-  /* Slice S8 B2a: bLSAG over BN254 G1 in the host (front/blsag.c). Kit only,
+  /* Slice S8 B2a: bLSAG over secp256k1 in the host (front/blsag.c). Kit only,
      `langc eval` only: zkHp, zkKey, zkDigest, zkSign and zkVerify. */
   OP_ZK_HP,
   OP_ZK_KEY,

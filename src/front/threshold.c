@@ -1,41 +1,22 @@
-/* Threshold opening of exponential ElGamal over BN254 G1 in the host (slice
-   S6 b1). See front/threshold.h. */
+/* Threshold opening of exponential ElGamal over secp256k1 in the host
+   (slice S6 b1). See front/threshold.h. */
 #include <string.h>
 
 #include "front/threshold.h"
 
 #include "front/blsag.h"
-#include "keccak.h"
+#include "sha256.h"
 
 const U256 THR_TAG = {{0x7368616d6972u, 0u, 0u, 0u}};
 const U256 DLEQ_TAG = {{0x646c6571u, 0u, 0u, 0u}};
 const U256 DLEQ_NONCE_TAG = {{0x646c657177u, 0u, 0u, 0u}};
 
-/* The 32 big endian bytes of X at OUT (limb 3 first), as word_bytes in
-   front/blsag.c. */
-static void word_bytes(const U256 *x, unsigned char *out) {
-  uint32_t i;
-  for (i = 0; i < 32u; i++)
-    out[i] = (unsigned char)(x->limb[3u - i / 8u] >> (56u - 8u * (i % 8u)));
-}
-
 void thr_hash(U256 *out, const U256 *a, const U256 *b) {
-  unsigned char data[64];
-  unsigned char digest[32];
-  uint32_t k;
-  uint32_t j;
-  word_bytes(a, data);
-  word_bytes(b, data + 32);
-  keccak256(data, sizeof data, digest);
-  for (k = 0; k < 4u; k++) {
-    out->limb[3u - k] = 0;
-    for (j = 0; j < 8u; j++)
-      out->limb[3u - k] = (out->limb[3u - k] << 8) | digest[8u * k + j];
-  }
+  sha256_words(out, a, b);
 }
 
-void thr_challenge(U256 *e, const G1 *key, const G1 *c1, const G1 *d, const G1 *a, const G1 *b) {
-  const G1 *points[5];
+void thr_challenge(U256 *e, const GroupPoint *key, const GroupPoint *c1, const GroupPoint *d, const GroupPoint *a, const GroupPoint *b) {
+  const GroupPoint *points[5];
   U256 x;
   U256 y;
   uint32_t i;
@@ -46,7 +27,7 @@ void thr_challenge(U256 *e, const G1 *key, const G1 *c1, const G1 *d, const G1 *
   points[4] = b;
   *e = DLEQ_TAG;
   for (i = 0; i < 5u; i++) {
-    g1_to_words(&x, &y, points[i]);
+    group_to_words(&x, &y, points[i]);
     thr_hash(e, e, &x);
     thr_hash(e, e, &y);
   }
@@ -61,20 +42,20 @@ void thr_nonce(U256 *out, const U256 *seed, uint64_t k) {
   blsag_reduce(out, &w);
 }
 
-int thr_deal(ThrShare *shares, G1 *pk, const U256 *sk, const U256 *seed, uint32_t t, uint32_t n) {
+int thr_deal(ThrShare *shares, GroupPoint *pk, const U256 *sk, const U256 *seed, uint32_t t, uint32_t n) {
   Fe coef[THR_N_MAX];
   Fe x;
   Fe acc;
   Fe tmp;
   U256 w;
-  G1 g;
+  GroupPoint g;
   uint32_t i;
   uint32_t k;
-  if (t < 1u || t > n || n > THR_N_MAX || !fe_from_u256(&coef[0], sk, &BN254_FR))
+  if (t < 1u || t > n || n > THR_N_MAX || !fe_from_u256(&coef[0], sk, &GROUP_N))
     return 0;
   for (k = 1; k < t; k++) {
     thr_nonce(&w, seed, k);
-    fe_from_u256(&coef[k], &w, &BN254_FR);
+    fe_from_u256(&coef[k], &w, &GROUP_N);
   }
   elg_generator(&g);
   for (i = 1; i <= n; i++) {
@@ -82,12 +63,12 @@ int thr_deal(ThrShare *shares, G1 *pk, const U256 *sk, const U256 *seed, uint32_
     fe_from_u64(&x, i);
     acc = coef[t - 1u];
     for (k = t - 1u; k > 0; k--) {
-      fe_mul(&tmp, &acc, &x, &BN254_FR);
-      fe_add(&acc, &tmp, &coef[k - 1u], &BN254_FR);
+      fe_mul(&tmp, &acc, &x, &GROUP_N);
+      fe_add(&acc, &tmp, &coef[k - 1u], &GROUP_N);
     }
     shares[i - 1u].x = i;
     fe_to_u256(&shares[i - 1u].s, &acc);
-    g1_mul(&shares[i - 1u].key, &g, &shares[i - 1u].s);
+    group_mul(&shares[i - 1u].key, &g, &shares[i - 1u].s);
   }
   elg_public(pk, sk);
   return 1;
@@ -103,43 +84,43 @@ void thr_partial(ThrPart *out, const ThrShare *share, const ElgCipher *ct) {
   Fe fs;
   Fe es;
   Fe fz;
-  G1 g;
-  g1_to_words(&c1x, &c1y, &ct->c1);
+  GroupPoint g;
+  group_to_words(&c1x, &c1y, &ct->c1);
   thr_hash(&w, &DLEQ_NONCE_TAG, &share->s);
   thr_hash(&w, &w, &c1x);
   thr_hash(&w, &w, &c1y);
   blsag_reduce(&w, &w);
   out->x = share->x;
-  g1_mul(&out->d, &ct->c1, &share->s);
+  group_mul(&out->d, &ct->c1, &share->s);
   elg_generator(&g);
-  g1_mul(&out->a, &g, &w);
-  g1_mul(&out->b, &ct->c1, &w);
+  group_mul(&out->a, &g, &w);
+  group_mul(&out->b, &ct->c1, &w);
   thr_challenge(&e, &share->key, &ct->c1, &out->d, &out->a, &out->b);
   blsag_reduce(&e, &e);
-  fe_from_u256(&fw, &w, &BN254_FR);
-  fe_from_u256(&fe, &e, &BN254_FR);
-  fe_from_u256(&fs, &share->s, &BN254_FR);
-  fe_mul(&es, &fe, &fs, &BN254_FR);
-  fe_add(&fz, &fw, &es, &BN254_FR);
+  fe_from_u256(&fw, &w, &GROUP_N);
+  fe_from_u256(&fe, &e, &GROUP_N);
+  fe_from_u256(&fs, &share->s, &GROUP_N);
+  fe_mul(&es, &fe, &fs, &GROUP_N);
+  fe_add(&fz, &fw, &es, &GROUP_N);
   fe_to_u256(&out->z, &fz);
 }
 
-int thr_verify(const ThrPart *part, const G1 *key, const ElgCipher *ct) {
+int thr_verify(const ThrPart *part, const GroupPoint *key, const ElgCipher *ct) {
   U256 e;
-  G1 g;
-  G1 l1;
-  G1 r1;
-  G1 l2;
-  G1 r2;
+  GroupPoint g;
+  GroupPoint l1;
+  GroupPoint r1;
+  GroupPoint l2;
+  GroupPoint r2;
   thr_challenge(&e, key, &ct->c1, &part->d, &part->a, &part->b);
   elg_generator(&g);
-  g1_mul(&l1, &g, &part->z);
-  g1_mul(&r1, key, &e);
-  g1_add(&r1, &part->a, &r1);
-  g1_mul(&l2, &ct->c1, &part->z);
-  g1_mul(&r2, &part->d, &e);
-  g1_add(&r2, &part->b, &r2);
-  return g1_eq(&l1, &r1) && g1_eq(&l2, &r2);
+  group_mul(&l1, &g, &part->z);
+  group_mul(&r1, key, &e);
+  group_add(&r1, &part->a, &r1);
+  group_mul(&l2, &ct->c1, &part->z);
+  group_mul(&r2, &part->d, &e);
+  group_add(&r2, &part->b, &r2);
+  return group_eq(&l1, &r1) && group_eq(&l2, &r2);
 }
 
 void thr_lagrange(U256 *out, const ThrPart *parts, uint32_t k, uint32_t i) {
@@ -155,30 +136,30 @@ void thr_lagrange(U256 *out, const ThrPart *parts, uint32_t k, uint32_t i) {
   for (j = 0; j < k; j++) {
     if (j != i) {
       fe_from_u64(&xj, parts[j].x);
-      fe_sub(&den, &xj, &xi, &BN254_FR);
-      fe_inv(&inv, &den, &BN254_FR);
-      fe_mul(&tmp, &lambda, &xj, &BN254_FR);
-      fe_mul(&lambda, &tmp, &inv, &BN254_FR);
+      fe_sub(&den, &xj, &xi, &GROUP_N);
+      fe_inv(&inv, &den, &GROUP_N);
+      fe_mul(&tmp, &lambda, &xj, &GROUP_N);
+      fe_mul(&lambda, &tmp, &inv, &GROUP_N);
     }
   }
   fe_to_u256(out, &lambda);
 }
 
-ThrResult thr_open(uint64_t *m, const ThrPart *parts, uint32_t k, const G1 *keys, uint32_t t, uint32_t n, const ElgCipher *ct, uint32_t bits) {
+ThrResult thr_open(uint64_t *m, const ThrPart *parts, uint32_t k, const GroupPoint *keys, uint32_t t, uint32_t n, const ElgCipher *ct, uint32_t bits) {
   uint32_t seen = 0;
   uint32_t i;
   ThrResult res = THR_REFUSED;
   U256 lambda;
-  G1 sum;
-  G1 term;
+  GroupPoint sum;
+  GroupPoint term;
   ElgResult got;
-  if (bits > ELG_BITS_MAX || n > THR_N_MAX || t < 1u || t > n || k > THR_N_MAX || !g1_on_curve(&ct->c1) || !g1_on_curve(&ct->c2))
+  if (bits > ELG_BITS_MAX || n > THR_N_MAX || t < 1u || t > n || k > THR_N_MAX || !group_on_curve(&ct->c1) || !group_on_curve(&ct->c2))
     return THR_REFUSED;
   for (i = 0; i < n; i++)
-    if (!g1_on_curve(&keys[i]))
+    if (!group_on_curve(&keys[i]))
       return THR_REFUSED;
   for (i = 0; i < k; i++)
-    if (!g1_on_curve(&parts[i].d) || !g1_on_curve(&parts[i].a) || !g1_on_curve(&parts[i].b))
+    if (!group_on_curve(&parts[i].d) || !group_on_curve(&parts[i].a) || !group_on_curve(&parts[i].b))
       return THR_REFUSED;
   if (k < t)
     return THR_TOO_FEW;
@@ -194,11 +175,11 @@ ThrResult thr_open(uint64_t *m, const ThrPart *parts, uint32_t k, const G1 *keys
   memset(&sum, 0, sizeof sum);
   for (i = 0; i < k; i++) {
     thr_lagrange(&lambda, parts, k, i);
-    g1_mul(&term, &parts[i].d, &lambda);
-    g1_add(&sum, &sum, &term);
+    group_mul(&term, &parts[i].d, &lambda);
+    group_add(&sum, &sum, &term);
   }
-  g1_neg(&sum, &sum);
-  g1_add(&sum, &ct->c2, &sum);
+  group_neg(&sum, &sum);
+  group_add(&sum, &ct->c2, &sum);
   got = elg_log(m, &sum, bits);
   switch (got) {
   case ELG_FOUND:

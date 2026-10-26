@@ -2,7 +2,7 @@
 -- The entry cast takes the calldata words choice, c_1, s_1, s_2, I.x, I.y (O28) and passes them to zkVerify. The ring is
 -- closed and the words are open, so the evaluator unrolls the verify to ecAdd, ecMul, hash, u256Le and u256Eq (front/eval.c
 -- zk_unroll) and `langc build` emits 6n precompile calls. The nullifier key is hash (hash I.x I.y) poll (ruling Q4).
-def g : Prod U256 U256 := pair 1u 2u
+def g : Prod U256 U256 := pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u
 def k0 : U256 := zkKey 0
 def k1 : U256 := zkKey 1
 def p0 : Prod U256 U256 := ecMul g k0

@@ -3,12 +3,12 @@
 
 #include "front/blsag.h"
 
-static int same_point(const G1 *a, const G1 *b) {
+static int same_point(const GroupPoint *a, const GroupPoint *b) {
   return fe_eq(&a->x, &b->x) && fe_eq(&a->y, &b->y);
 }
 
 /* Recover the alleged key from two public scalars and a challenge delta. */
-static int recovers(const G1 *generator, const G1 *public_key, const U256 *a, const U256 *b, const U256 *ca, const U256 *cb) {
+static int recovers(const GroupPoint *generator, const GroupPoint *public_key, const U256 *a, const U256 *b, const U256 *ca, const U256 *cb) {
   U256 wa;
   U256 wb;
   U256 scalar;
@@ -18,21 +18,21 @@ static int recovers(const G1 *generator, const G1 *public_key, const U256 *a, co
   Fe denominator;
   Fe inverse;
   Fe key;
-  G1 recovered;
+  GroupPoint recovered;
   blsag_reduce(&wa, a);
   blsag_reduce(&wb, b);
-  fe_from_u256(&fa, &wa, &BN254_FR);
-  fe_from_u256(&fb, &wb, &BN254_FR);
-  fe_sub(&numerator, &fa, &fb, &BN254_FR);
+  fe_from_u256(&fa, &wa, &GROUP_N);
+  fe_from_u256(&fb, &wb, &GROUP_N);
+  fe_sub(&numerator, &fa, &fb, &GROUP_N);
   blsag_reduce(&wa, ca);
   blsag_reduce(&wb, cb);
-  fe_from_u256(&fa, &wa, &BN254_FR);
-  fe_from_u256(&fb, &wb, &BN254_FR);
-  fe_sub(&denominator, &fa, &fb, &BN254_FR);
-  fe_inv(&inverse, &denominator, &BN254_FR);
-  fe_mul(&key, &numerator, &inverse, &BN254_FR);
+  fe_from_u256(&fa, &wa, &GROUP_N);
+  fe_from_u256(&fb, &wb, &GROUP_N);
+  fe_sub(&denominator, &fa, &fb, &GROUP_N);
+  fe_inv(&inverse, &denominator, &GROUP_N);
+  fe_mul(&key, &numerator, &inverse, &GROUP_N);
   fe_to_u256(&scalar, &key);
-  g1_mul(&recovered, generator, &scalar);
+  group_mul(&recovered, generator, &scalar);
   return same_point(&recovered, public_key);
 }
 
@@ -41,22 +41,23 @@ int main(void) {
   const U256 one = {{1u, 0u, 0u, 0u}};
   const U256 two = {{2u, 0u, 0u, 0u}};
   const U256 key = {{71u, 0u, 0u, 0u}};
-  G1 generator;
-  G1 ring[3];
-  G1 changed[2];
-  G1 swapped[2];
-  G1 infinity;
+  GroupPoint generator;
+  GroupPoint ring[3];
+  GroupPoint changed[2];
+  GroupPoint swapped[2];
+  GroupPoint infinity;
   U256 original[5];
   U256 other[5];
   U256 moved[5];
   U256 again[5];
   uint32_t i;
   int ok = 1;
-  if (!g1_from_words(&generator, &one, &two) || !g1_from_words(&infinity, &zero, &zero))
+  group_gen(&generator);
+  if (!group_from_words(&infinity, &zero, &zero))
     return 1;
-  g1_mul(&ring[0], &generator, &key);
+  group_mul(&ring[0], &generator, &key);
   ring[1] = generator;
-  g1_mul(&ring[2], &generator, &two);
+  group_mul(&ring[2], &generator, &two);
   changed[0] = ring[0];
   changed[1] = ring[2];
   swapped[0] = ring[1];

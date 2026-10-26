@@ -112,7 +112,7 @@ typedef enum {
   RULE_KMAP,
   RULE_KMAP_GET,
   RULE_KMAP_SET,
-  RULE_FIXED, /* S2: a fixed signature over U256, Nat, G1 and List (Prod G1 G2) */
+  RULE_FIXED, /* S2: a fixed signature over U256, Nat, points and lists */
   RULE_FIN,
   RULE_FIN_OP,
   RULE_GLUE,
@@ -204,10 +204,8 @@ static const Builtin BUILTINS[] = {
   {"natMod", 2, RULE_NAT2, OP_NAT_MOD, OP_NAT, 0, VIS_INTERNAL},
   {"len", 2, RULE_LEN, OP_FM_LEN, OP_NAT, 0, VIS_GUEST},
   {"hash", 2, RULE_U256_2, OP_HASH, OP_U256, 0, VIS_INTERNAL},
-  {"ecrecover", 4, RULE_FIXED, OP_ECRECOVER, OP_ADDR, 0, VIS_INTERNAL},
   {"ecAdd", 2, RULE_FIXED, OP_EC_ADD, OP_PROD, 0, VIS_INTERNAL},
   {"ecMul", 2, RULE_FIXED, OP_EC_MUL, OP_PROD, 0, VIS_INTERNAL},
-  {"ecPairing", 1, RULE_FIXED, OP_EC_PAIRING, OP_FLAG, 0, VIS_INTERNAL},
   {"addrToU256", 1, RULE_ADDR2, OP_ADDR_TO_U256, OP_U256, 0, VIS_INTERNAL},
   {"zkHp", 1, RULE_FIXED, OP_ZK_HP, OP_PROD, 0, VIS_INTERNAL},
   {"zkKey", 1, RULE_FIXED, OP_ZK_KEY, OP_U256, 0, VIS_INTERNAL},
@@ -2212,20 +2210,18 @@ static const Core *rule_len(Call *k) {
 }
 
 /* The curve ops (S2, R17) and the zk ops (S8 B2a): fixed signatures over
-   U256, Nat, G1 = Prod U256 U256, G2 = Prod G1 G1 (the EIP-197 field order),
-   List (Prod G1 G2), a ring List G1 and a word list List U256. The result is
-   the row result; OP_PROD in the row means G1 and OP_LIST means List U256. */
+   U256, Nat, a point Prod U256 U256, a ring List of points and a word list
+   List U256. The result is the row result; OP_PROD in the row means a point
+   and OP_LIST means List U256. */
 static const Core *rule_fixed(Call *k) {
-  enum { SHAPE_U256, SHAPE_NAT, SHAPE_G1, SHAPE_PAIRS, SHAPE_RING, SHAPE_WORDS };
+  enum { SHAPE_U256, SHAPE_NAT, SHAPE_POINT, SHAPE_RING, SHAPE_WORDS };
   static const struct {
     Op op;
     unsigned char arg[4];
   } ROWS[] = {
-    {OP_ECRECOVER, {SHAPE_U256, SHAPE_NAT, SHAPE_U256, SHAPE_U256}},
-    {OP_EC_ADD, {SHAPE_G1, SHAPE_G1, SHAPE_U256, SHAPE_U256}},
-    {OP_EC_MUL, {SHAPE_G1, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
-    {OP_EC_PAIRING, {SHAPE_PAIRS, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
-    {OP_ZK_HP, {SHAPE_G1, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
+    {OP_EC_ADD, {SHAPE_POINT, SHAPE_POINT, SHAPE_U256, SHAPE_U256}},
+    {OP_EC_MUL, {SHAPE_POINT, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
+    {OP_ZK_HP, {SHAPE_POINT, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
     {OP_ZK_KEY, {SHAPE_NAT, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
     {OP_ZK_DIGEST, {SHAPE_RING, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
     {OP_ZK_SIGN, {SHAPE_RING, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
@@ -2233,10 +2229,9 @@ static const Core *rule_fixed(Call *k) {
   };
   Checker *c = k->c;
   const Value *u = tyop(c, OP_U256, 0, NULL, NULL, NULL);
-  const Value *g1 = tyop(c, OP_PROD, 2, u, u, NULL);
-  const Value *g2 = tyop(c, OP_PROD, 2, g1, g1, NULL);
+  const Value *point = tyop(c, OP_PROD, 2, u, u, NULL);
   const Value *words = tyop(c, OP_LIST, 1, u, NULL, NULL);
-  const Value *shape[6] = {u, nat_type(c), g1, tyop(c, OP_LIST, 1, tyop(c, OP_PROD, 2, g1, g2, NULL), NULL, NULL), tyop(c, OP_LIST, 1, g1, NULL, NULL), words};
+  const Value *shape[5] = {u, nat_type(c), point, tyop(c, OP_LIST, 1, point, NULL, NULL), words};
   const Core *args[4] = {NULL, NULL, NULL, NULL};
   size_t row = 0;
   while (row < sizeof ROWS / sizeof ROWS[0] && ROWS[row].op != k->b->op) row++;
@@ -2245,7 +2240,7 @@ static const Core *rule_fixed(Call *k) {
     args[i] = check(c, k->args[i], shape[ROWS[row].arg[i]]);
     if (args[i] == NULL) return NULL;
   }
-  k->type = k->b->result == OP_PROD ? g1 : k->b->result == OP_LIST ? words : tyop(c, k->b->result, 0, NULL, NULL, NULL);
+  k->type = k->b->result == OP_PROD ? point : k->b->result == OP_LIST ? words : tyop(c, k->b->result, 0, NULL, NULL, NULL);
   return core_op(c, k->b->op, 0, 0, args, k->b->arity);
 }
 

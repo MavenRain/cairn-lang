@@ -15,7 +15,7 @@
 #define BITS 16u
 
 /* The ciphertext of M under PK with the nonce r_I. */
-static void encrypt_u64(ElgCipher *out, const G1 *pk, uint64_t m, uint64_t i) {
+static void encrypt_u64(ElgCipher *out, const GroupPoint *pk, uint64_t m, uint64_t i) {
   U256 w;
   U256 r;
   u256_from_u64(&w, m);
@@ -32,7 +32,7 @@ static void quorum(ThrPart *out, const ThrShare *shares, const uint32_t *idx, ui
 
 /* 1 when the K PARTS open CT to EXPECT, with the plaintext WANT on
    THR_FOUND. */
-static int row(const char *name, const ThrPart *parts, uint32_t k, const G1 *keys, const ElgCipher *ct, ThrResult expect, uint64_t want) {
+static int row(const char *name, const ThrPart *parts, uint32_t k, const GroupPoint *keys, const ElgCipher *ct, ThrResult expect, uint64_t want) {
   uint64_t m = 0;
   ThrResult got = thr_open(&m, parts, k, keys, T, N, ct, BITS);
   if (got == expect && (expect != THR_FOUND || m == want))
@@ -46,10 +46,10 @@ static void word(const char *name, const U256 *w) {
          (unsigned long long)w->limb[1], (unsigned long long)w->limb[0]);
 }
 
-static void point(const char *x, const char *y, const G1 *p) {
+static void point(const char *x, const char *y, const GroupPoint *p) {
   U256 a;
   U256 b;
-  g1_to_words(&a, &b, p);
+  group_to_words(&a, &b, p);
   word(x, &a);
   word(y, &b);
 }
@@ -57,35 +57,35 @@ static void point(const char *x, const char *y, const G1 *p) {
 /* A holder of share 1 must not recover sk by subtracting a public
    coefficient from s_1. This recovered the entire key before the dealer
    coefficients were derived from private entropy. */
-static int private_dealer(const ThrShare *share, const G1 *pk) {
+static int private_dealer(const ThrShare *share, const GroupPoint *pk) {
   U256 public_coef;
   U256 recovered;
   Fe s;
   Fe a;
   Fe guess;
-  G1 guessed_pk;
+  GroupPoint guessed_pk;
   u256_from_u64(&public_coef, 1u);
   thr_hash(&public_coef, &THR_TAG, &public_coef);
   blsag_reduce(&public_coef, &public_coef);
-  fe_from_u256(&s, &share->s, &BN254_FR);
-  fe_from_u256(&a, &public_coef, &BN254_FR);
-  fe_sub(&guess, &s, &a, &BN254_FR);
+  fe_from_u256(&s, &share->s, &GROUP_N);
+  fe_from_u256(&a, &public_coef, &GROUP_N);
+  fe_sub(&guess, &s, &a, &GROUP_N);
   fe_to_u256(&recovered, &guess);
   elg_public(&guessed_pk, &recovered);
-  if (!g1_eq(&guessed_pk, pk))
+  if (!group_eq(&guessed_pk, pk))
     return 1;
   fputs("FAIL threshold one share recovers master key\n", stderr);
   return 0;
 }
 
 /* Fresh entropy must change the shares while preserving the master key. */
-static int fresh_dealer(const ThrShare *shares, const G1 *pk, const U256 *sk, const U256 *seed) {
+static int fresh_dealer(const ThrShare *shares, const GroupPoint *pk, const U256 *sk, const U256 *seed) {
   ThrShare fresh[N];
-  G1 fresh_pk;
+  GroupPoint fresh_pk;
   U256 other;
   thr_hash(&other, &THR_TAG, seed);
   if (thr_deal(fresh, &fresh_pk, sk, &other, T, N) &&
-      g1_eq(&fresh_pk, pk) && u256_cmp(&fresh[0].s, &shares[0].s) != 0)
+      group_eq(&fresh_pk, pk) && u256_cmp(&fresh[0].s, &shares[0].s) != 0)
     return 1;
   fputs("FAIL threshold fresh dealer entropy\n", stderr);
   return 0;
@@ -101,10 +101,10 @@ static int words(const ThrShare *shares, const ElgCipher *ct) {
   U256 m;
   U256 one;
   U256 bad;
-  G1 g;
-  G1 p;
-  G1 q1;
-  G1 q2;
+  GroupPoint g;
+  GroupPoint p;
+  GroupPoint q1;
+  GroupPoint q2;
   quorum(parts, shares, s12, 2u, ct);
   thr_challenge(&e, &shares[0].key, &ct->c1, &parts[0].d, &parts[0].a, &parts[0].b);
   thr_lagrange(&l1, parts, 2u, 0u);
@@ -124,27 +124,27 @@ static int words(const ThrShare *shares, const ElgCipher *ct) {
   point("d2x", "d2y", &parts[1].d);
   word("l1", &l1);
   word("l2", &l2);
-  g1_mul(&q1, &parts[0].d, &l1);
-  g1_mul(&q2, &parts[1].d, &l2);
+  group_mul(&q1, &parts[0].d, &l1);
+  group_mul(&q2, &parts[1].d, &l2);
   point("q1x", "q1y", &q1);
   point("q2x", "q2y", &q2);
-  g1_add(&p, &q1, &q2);
+  group_add(&p, &q1, &q2);
   point("kx", "ky", &p);
   point("c2x", "c2y", &ct->c2);
   word("m", &m);
-  g1_mul(&p, &g, &m);
+  group_mul(&p, &g, &m);
   point("mgx", "mgy", &p);
-  g1_mul(&p, &g, &parts[0].z);
+  group_mul(&p, &g, &parts[0].z);
   point("zgx", "zgy", &p);
-  g1_mul(&p, &shares[0].key, &e);
+  group_mul(&p, &shares[0].key, &e);
   point("epkx", "epky", &p);
-  g1_add(&p, &parts[0].a, &p);
+  group_add(&p, &parts[0].a, &p);
   point("r1x", "r1y", &p);
-  g1_mul(&p, &ct->c1, &parts[0].z);
+  group_mul(&p, &ct->c1, &parts[0].z);
   point("zcx", "zcy", &p);
-  g1_mul(&p, &parts[0].d, &e);
+  group_mul(&p, &parts[0].d, &e);
   point("edx", "edy", &p);
-  g1_add(&p, &parts[0].b, &p);
+  group_add(&p, &parts[0].b, &p);
   point("r2x", "r2y", &p);
   return 0;
 }
@@ -157,9 +157,9 @@ int main(int argc, char **argv) {
   U256 sk;
   U256 seed;
   U256 one;
-  G1 pk;
-  G1 g;
-  G1 keys[N];
+  GroupPoint pk;
+  GroupPoint g;
+  GroupPoint keys[N];
   ThrShare shares[N];
   ThrPart parts[N];
   ThrPart bad[2];
@@ -214,7 +214,7 @@ int main(int argc, char **argv) {
   elg_generator(&g);
   bad[0] = parts[0];
   bad[1] = parts[1];
-  g1_add(&bad[1].d, &bad[1].d, &g);
+  group_add(&bad[1].d, &bad[1].d, &g);
   ok &= row("D_2 + G with the proof of D_2", bad, 2u, keys, &ct, THR_BAD_PROOF, 0u);
   bad[1] = parts[1];
   u256_from_u64(&one, 1u);

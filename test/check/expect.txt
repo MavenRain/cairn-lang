@@ -55,7 +55,6 @@ event-arity.lang TYPE_ARITY
 event-arg.lang TYPE_MISMATCH
 event-state.lang REFUSE_STATE
 hash-type.lang TYPE_MISMATCH
-pairing-list.lang TYPE_MISMATCH
 pruned-op.lang NAME_UNKNOWN
 path-end.lang PATH_END
 path-uip.lang PATH_UIP
@@ -109,10 +108,8 @@ kit-pay.lang REFUSE_KIT
 base-natdiv.lang REFUSE_KIT
 base-natmod.lang REFUSE_KIT
 base-hash.lang REFUSE_KIT
-base-ecrecover.lang REFUSE_KIT
 base-ecadd.lang REFUSE_KIT
 base-ecmul.lang REFUSE_KIT
-base-ecpairing.lang REFUSE_KIT
 base-addrtou256.lang REFUSE_KIT
 sig-defined.lang REFUSE_SIG
 sig-primitive.lang REFUSE_SIG

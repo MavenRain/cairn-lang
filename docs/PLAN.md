@@ -14,7 +14,10 @@ Status: S0 DONE (seed e222eba). S1 DONE: the USER took each
 recommendation of section 11 (section 1). S2 DONE: the intent-lang kernel
 at 67445ae is ported, without the EVM writer and the swap (section 9).
 S3 DONE: the clock parts are gone, with `REFUSE_TIME`, `OpPos` and
-`len` (sections 4 and 9). Next: S4 (the group and the hash).
+`len` (sections 4 and 9). S4 DONE: the Sigma, ElGamal, threshold and bLSAG
+code runs on secp256k1 through `group.h`, the hash is SHA-256, and the
+BN254 and Keccak code is gone (sections 6.1 and 9). Next: S5 (Part R, the
+record).
 
 ## 1. Rulings
 
@@ -25,6 +28,7 @@ S3 DONE: the clock parts are gone, with `REFUSE_TIME`, `OpPos` and
 | 2026-10-25 | Host: TinyCC. All of `langc` is C99 that TinyCC builds, `langc mcp` too. | DESIGN.md, request |
 | 2026-10-25 | S1, verbatim: "Take recommendations". So each S0 question takes (a): Q-S0-1 additive exponential ElGamal; Q-S0-2 secp256k1; Q-S0-3 SHA-256; Q-S0-4 the `tOpen`-th valid share closes a ballot; Q-S0-5 one threshold Schnorr signature (FROST style) under `keyAppend`; Q-S0-6 the hash chain; Q-S0-7 Pedersen DKG with Feldman commitments and a proof of knowledge, and the same for reshare; Q-S0-8 the Anthropic `count_tokens` endpoint; Q-S0-9 the Python and Rust programs run, with equal outputs. | USER, S1 |
 | 2026-10-26 | S3: Q-S3-1 to Q-S3-3 each take (a). Q-S3-1: the kit prelude keeps `family Env := makeEnv (caller : Addr)` without `now` and `block`; `contract.c` and `contract.h` go, the prelude text moves into `src/front/front.c`, and `langc run` calls are `CALLER NAME ARGS`. Q-S3-2: `Out` (`pay`, `pull`, `emit`) stays until S5 (O15). Q-S3-3: the bag family `Pos` stays, and the trace position is `def OpPos : Type 0 := Nat` (section 4). | USER, S3 |
+| 2026-10-26 | S4, verbatim: "Take all recommendations for Q-S4-*". So Q-S4-1 to Q-S4-7 each take (a). Q-S4-1: the bLSAG key image keeps try-and-increment on secp256k1 (x = H(...) mod p, accept when x^3 + 7 is a square, sqrt = a^((p + 1) / 4)). Q-S4-2: `ecPairing` goes (`OP_EC_PAIRING`, the rows `base-ecpairing` and `pairing-list`, the precompile `g2`, `pairOk`, `pairNil`). Q-S4-3: each example writes G as a `pair` of the two SEC 2 U256 words; there is no `ecGen` op. Q-S4-4: `examples/bn254.lang` becomes `examples/secp256k1.lang` with the SEC 2 p and n; `precompile.lang` stays, less its `ecPairing` and `ecrecover` defs. Q-S4-5: the SHA-256 vector of the empty string comes from the NIST CAVP file `SHA256ShortMsg.rsp` (`Len = 0`). Q-S4-6: the bLSAG tag is "cairn" (O5). Q-S4-7: a new `test/shatool.c` (the FIPS vectors), and `test/secptool.c` is the group tool (the SEC 2 checks). Later in S4, Q-S4-8 (a): the `range2` row of `zk.lang` uses s = r = n, the smallest scalar out of range. Q-S4-9 (b): the row for a point on the curve that is not the key image uses I = n G through the new def `curveG : Nat -> Flag`; the row `zk curveG 1 => 0` replaces `zk curve2 2 => 0`, because (1, y) with y^2 = 8 needs a 77-digit y and an eval Nat argument stops at 2^64 - 1. | USER, S4 |
 
 The seed is `bin/new-lang.sh cairn-lang tcc-wasm` from lang-template
 5265a2a. Native code is not a target (the USER did not pick it).
@@ -236,9 +240,9 @@ S2 removes only the EVM writer (`src/evm.c`, `src/asm.c`, `src/lower.c`,
 | File | Users at 67445ae | Leaves in |
 |---|---|---|
 | `contract.c` (`Env`, `now`, `caller`) | the front end | S3 (no time): DONE, the prelude text is in `front.c` |
-| `keccak.c` | `eval.c`, `blsag.c`, `elgamal.c`, `threshold.c` (Fiat-Shamir) | S4 (SHA-256, Q-S0-3 (a)) |
-| `bn254.c` | the Sigma, ElGamal, threshold and bLSAG code | S4 (secp256k1, Q-S0-2 (a)) |
-| `secp256k1.c` (`ecrecover`) | the front end, `test/ballottool.c` | S4: its field code goes into the group backend, `ecrecover` goes |
+| `keccak.c` | `eval.c`, `blsag.c`, `elgamal.c`, `threshold.c` (Fiat-Shamir) | S4 (SHA-256, Q-S0-3 (a)): DONE, `src/sha256.c` replaces it |
+| `bn254.c` | the Sigma, ElGamal, threshold and bLSAG code | S4 (secp256k1, Q-S0-2 (a)): DONE, `src/front/group.h` replaces it, on `field.c` and `secp256k1.c` |
+| `secp256k1.c` (`ecrecover`) | the front end, `test/ballottool.c` | S4: DONE, the field code is in `src/front/field.c`, `secp256k1.c` is the group backend of `group.h`, and `ecrecover` is gone |
 
 The tcc-wasm `src/front/lower.c`, `src/wasm.c` and `src/ir.h` are written
 against the kit front end, not against the ported one. In S2 they leave
@@ -313,8 +317,8 @@ mutant of it, as in intent-lang.
 | S1 | The USER rules section 11. Record the rulings here. | DONE (all (a)) |
 | S2 | Port the intent-lang kernel at 67445ae (6.1). Survey first: SAME, CHANGED, INTENT-ONLY. Targets = the intent-lang counts less the EVM and swap rows. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 189, kit-only refusals 24, evals 215, proves 2, build refusals 1 (new), guest differential 28, runs 7, run refusals 11, 11 tool regressions passed. Each count is at its target (`cairn-lang-work/S2-survey.md`). |
 | S3 | No time: remove the clock parts (4), add `REFUSE_TIME`, `OpPos` and `len`. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 195, kit-only refusals 24, evals 218, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1 (new), 11 tool regressions passed. Each count is at its target (`cairn-lang-work/S3-survey.md` section 4; examples 53 with the new `examples/oppos.lang`). Mutants KILLED: `epoch` out of `TIME_WORDS`; `fmEta` counts 2. `len` is a C builtin (section 4). |
-| S4 | The group and the hash (Q-S0-2 (a), Q-S0-3 (a)): a group interface `group.h` for the Sigma, ElGamal, threshold and bLSAG code; the secp256k1 field and group; SHA-256 (FIPS 180-4 vectors); remove `bn254.c`. | NEXT |
-| S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | |
+| S4 | The group and the hash (Q-S0-2 (a), Q-S0-3 (a)): a group interface `group.h` for the Sigma, ElGamal, threshold and bLSAG code; the secp256k1 field and group; SHA-256 (FIPS 180-4 vectors); remove `bn254.c`. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 192, kit-only refusals 22, evals 216, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 12 tool regressions passed (new: `shatool`). Each count is at its target (`cairn-lang-work/S4-survey.md` section 9). The drops are the ruled removals: check refusals 195 to 192 and kit-only refusals 24 to 22 (`base-ecpairing`, `pairing-list`, `base-ecrecover`), evals 218 to 216 (`recoverGood`, `recoverBad`). Mutants 2/2 KILLED: SHA-256 `K[0]` + 1 (`shatool`, 4 FAIL lines); the curve constant 7 to 5 (`secptool`, 3 FAIL lines). |
+| S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | NEXT |
 | S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | |
 | S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | |
 | S8 | Wasm: lower the ported core to the IR, the crypto prelude, differential vectors. | |
@@ -338,15 +342,20 @@ mutant of it, as in intent-lang.
   the time words.
 - O4 The S2 port must not take `.kanon-exec/` or `.kanon-wait/` (they are
   untracked in intent-lang).
-- O5 The bLSAG domain tag of intent-lang is the bytes of "orbit". S4 sets a
-  cairn tag or records why the old one stays.
+- O5 DONE (S4, Q-S4-6 (a)). The bLSAG domain tag is the bytes of "cairn"
+  (`BLSAG_TAG` = 0x636169726e in `src/front/blsag.c`). The intent-lang tag
+  was "orbit".
 - O6 `REFUSE_TARGET_SECRET` (S9) needs a sound mark of the secret values:
   the shares, the nonces and the decryption key. S6 marks them in the
   types.
-- O7 The SHA-256 test vectors come from the published standard (FIPS
+- O7 DONE (S4). The SHA-256 test vectors come from the published standard (FIPS
   180-4 and the NIST example values), not from another implementation
   that the gate would trust. The same holds for the secp256k1 constants
-  (SEC 2).
+  (SEC 2). `test/shatool.c` has "abc", the 448-bit message and one million
+  "a" from FIPS 180-2 Appendix B (the NIST example file that FIPS 180-4
+  points to), and the empty string from the NIST CAVP file
+  `SHA256ShortMsg.rsp` (Q-S4-5 (a)). `test/secptool.c` has G and n as the
+  SEC 2 version 2 section 2.4.1 words, and checks `group_gen` against them.
 - O8 A linear fold over `FreeMon Entry` at run time (S8). The kit refuses
   a run-time fold over a tree; a record is a tree with one spine. Either
   the lowering accepts the linear case, or the record lowers to an array
@@ -355,7 +364,9 @@ mutant of it, as in intent-lang.
   `docs/MCP.md` at S13.
 - O10 The `fix` of each refusal code (A2) is one concrete edit. A code
   with no edit gives `fix: null` and a reason.
-- O11 (S2) `test/ballottool.c` keeps the swap vectors of intent-lang
+- O11 DONE (S4). `test/ballottool.c` now uses `group.h` and SHA-256, and the
+  swap vectors are gone. The S2 text:
+  (S2) `test/ballottool.c` keeps the swap vectors of intent-lang
   (`fill_intent`: `intentHash`, `replayKey`, `cipherDigest`; its comments
   name `intent.lang` and `intentsig.lang`, which S2 removed). S2 did not
   edit the tool. S4 rebuilds the tool on `group.h` and SHA-256, and removes
@@ -383,6 +394,10 @@ mutant of it, as in intent-lang.
 - O16 (S3) `len` is a C builtin (section 4). If a later slice gives the
   domain `isSet Nat` and the `natAdd` paths, `len` becomes a domain fold
   over `fmFold`, and `OP_FM_LEN` goes.
+- O17 (S4) `src/front/lower.c` does not compile with clang: `OP_EQ` and
+  `OP_REFL` are not declared in the ported `core.h`. This was so before S4.
+  The file is out of the build (O13), so the gate does not see it. S8
+  adapts the file (6.1).
 
 ## 11. Questions for the USER (S0)
 
