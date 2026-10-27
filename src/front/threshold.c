@@ -197,3 +197,29 @@ ThrResult thr_open(uint64_t *m, const ThrPart *parts, uint32_t k, const GroupPoi
   }
   return res;
 }
+
+ThrResult thr_close(uint32_t *at, const ThrPart *parts, uint32_t k, const GroupPoint *keys, uint32_t t, uint32_t n, const ElgCipher *ct) {
+  uint32_t seen = 0;
+  uint32_t good = 0;
+  uint32_t i;
+  if (n > THR_N_MAX || t < 1u || t > n || !group_on_curve(&ct->c1) || !group_on_curve(&ct->c2))
+    return THR_REFUSED;
+  for (i = 0; i < n; i++)
+    if (!group_on_curve(&keys[i]))
+      return THR_REFUSED;
+  for (i = 0; i < k; i++) {
+    if (parts[i].x == 0u || parts[i].x > n || ((seen >> parts[i].x) & 1u) != 0u)
+      continue;
+    if (!group_on_curve(&parts[i].d) || !group_on_curve(&parts[i].a) || !group_on_curve(&parts[i].b))
+      continue;
+    if (!thr_verify(&parts[i], &keys[parts[i].x - 1u], ct))
+      continue;
+    seen |= 1u << parts[i].x;
+    good++;
+    if (good == t) {
+      *at = i;
+      return THR_FOUND;
+    }
+  }
+  return THR_TOO_FEW;
+}

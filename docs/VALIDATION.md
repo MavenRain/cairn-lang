@@ -30,3 +30,24 @@ its fixed kernel type, independently of the domain definition named
 `isSet`. The domain folds `len`, `chainFrom` (thus `head`), `verify` and
 `verifyAt` use them (`domain/domain.lang`), directly or through
 `isSetFun`.
+
+## Assumptions
+
+Each row is a computational assumption that no path can prove. V1 to V4
+stay in PLAN section 5.
+
+| Item | Since | Assumption |
+|---|---|---|
+| V5 | S6, Q-S0-7 (a), Q-S6-8 (a) | The Pedersen DKG lets a member bias the distribution of the public key (Gennaro, Jarecki, Krawczyk, Rabin). The security of ElGamal and of the threshold Schnorr signature under that bias is an assumption (PLAN section 5, row V5). |
+
+`src/front/dkg.c` deals and reshares the keys `keyOpen` and `keyAppend`:
+a Pedersen DKG with Feldman commitments and a Schnorr proof for each dealt
+secret. The reshare keeps the public key. `thr_deal` in
+`src/front/threshold.c` is a trusted dealer. It is for test vectors only.
+
+Initial DKG combination requires the agreed threshold and member count
+from trusted caller state and one verified contribution from every member.
+The caller must authenticate dealer identities, reliably broadcast the same
+commitments to all members, and deliver the private shares over authenticated
+confidential channels, as in the [FROST DKG protocol](https://github.com/ZcashFoundation/frost/blob/main/book/src/tutorial/dkg.md).
+Quorum resharing instead uses the old threshold and verification keys.

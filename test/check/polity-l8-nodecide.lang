@@ -1,0 +1,4 @@
+-- L8 without decideYes: for each s and y the step does not reduce, so this
+-- law is refused.
+def l8NoDecide : (p : Proposal) -> (s : Polity) -> (y : Count) -> Path Polity (stepD s (pair p y)) p :=
+  fun (p : Proposal) (s : Polity) (y : Count) => refl

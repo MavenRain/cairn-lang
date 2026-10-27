@@ -8,9 +8,9 @@
    The holder of share i gives the partial decryption D_i = s_i C1 with a
    Chaum-Pedersen proof (A, B, z) that log_G PK_i = log_C1 D_i. Any t parts
    with good proofs give sk C1 = sum lambda_i D_i (Lagrange in the exponent
-   at 0), thus m G = C2 - sk C1 and m by elg_log. The dealer and the
-   distributed key generation that would replace it are VALIDATION
-   assumptions.
+   at 0), thus m G = C2 - sk C1 and m by elg_log. The dealer is for test
+   vectors only: front/dkg.c deals the keys (docs/VALIDATION.md,
+   Assumptions).
 
    The challenge e is the hash chain of the guest `hash a b` (SHA-256 of
    the 64 big endian bytes of a and b) from DLEQ_TAG over the ten point
@@ -94,5 +94,14 @@ void thr_lagrange(U256 *out, const ThrPart *parts, uint32_t k, uint32_t i);
    elg_log on C2 - sum lambda_i D_i. A K above T uses all K parts. *M gets m
    on THR_FOUND. */
 ThrResult thr_open(uint64_t *m, const ThrPart *parts, uint32_t k, const GroupPoint *keys, uint32_t t, uint32_t n, const ElgCipher *ct, uint32_t bits);
+/* The close of a ballot (Q-S6-2 (a)): the K parts for CT in arrival order.
+   A part counts when its x is 1 to N and no earlier counted part has the
+   same x, its points are on the curve and thr_verify holds against
+   KEYS[x - 1]. A part that does not count does not stop the close. In
+   order: THR_REFUSED when T or N is out of range or a key or CT is off the
+   curve; THR_FOUND when the T-th part counts, with *AT = its index in PARTS
+   (from 0); THR_TOO_FEW when fewer than T parts count (the ballot stays
+   open). The parts that count, up to *AT, are a quorum for thr_open. */
+ThrResult thr_close(uint32_t *at, const ThrPart *parts, uint32_t k, const GroupPoint *keys, uint32_t t, uint32_t n, const ElgCipher *ct);
 
 #endif

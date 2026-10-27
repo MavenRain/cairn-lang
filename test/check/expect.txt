@@ -190,3 +190,5 @@ time-timestamp.lang REFUSE_TIME
 time-time.lang REFUSE_TIME
 time-clock.lang REFUSE_TIME
 time-epoch.lang REFUSE_TIME
+polity-l9-swapped.lang PATH_END
+polity-l8-nodecide.lang PATH_END

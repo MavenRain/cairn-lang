@@ -9,14 +9,14 @@
 -- kept words; castSeal checks the sum proof, adds slot 0 to T0 and slot 1 to
 -- T1 (the c1 and c2 points, from (0, 0), the identity of ecAdd) and marks N
 -- used. stage holds 1 at N after castSig and 1 at hash N j after the proof of
--- slot j; a second castSig of a pending N starts N again. enact opens T0 with
+-- slot j; a second castSig of a pending N starts N again. enactKit opens T0 with
 -- the shares of the quorum {1, 2} (the Lagrange constants l1 l2 are contract
 -- constants, O31): yes = m, no = casts - yes, and the window moves to the
 -- proposal when yes > no (a tie keeps it). The fill and cancel are slice b5.
 state State := makeState (used : Map U256 Flag) (pend : Map U256 U256) (stage : Map U256 U256) (t0ax : U256) (t0ay : U256) (t0bx : U256) (t0by : U256) (t1ax : U256) (t1ay : U256) (t1bx : U256) (t1by : U256) (casts : U256) (castEnd : U256) (proposal : U256) (window : U256) (enacted : Flag) (keys : Map U256 Flag) (fills : Map U256 U256) (seq : U256)
 
 -- castEnd 12, proposal 4, window 6, seq 0. seq is the count of entries done (S3, no time): each
--- entry adds 1, a castSeal needs seq <= castEnd and enact needs seq > castEnd.
+-- entry adds 1, a castSeal needs seq <= castEnd and enactKit needs seq > castEnd.
 def init : State := makeState mapEmpty mapEmpty mapEmpty 0u 0u 0u 0u 0u 0u 0u 0u 0u 12u 4u 6u flagNo mapEmpty mapEmpty 0u
 
 def ballotTag : U256 := 0x62616c6c6f74u
@@ -376,18 +376,18 @@ def castSeal : (env : Env) -> (s : State) -> (ix iy ax ay bx by z : U256) -> Opt
         none)
 
 -- The reactor contract (examples/reactor.lang, S10R): its entry transfer sets its window when the caller is
--- this DAO (Q-S11-2 (a)). The window after enact: the proposal when yes = m > no = casts - m.
+-- this DAO (Q-S11-2 (a)). The window after enactKit: the proposal when yes = m > no = casts - m.
 def reactor : Addr := 0x0000000000000000000000000072656163746f72
 def nextWindow : (s : State) -> (m : U256) -> U256 :=
   fun (s : State) (m : U256) => flagIf (u256Le m (u256Sub (casts s) m)) (window s) (proposal s)
 
--- The event of enact (S5 O15): the reactor and the new window.
+-- The event of enactKit (S5 O15): the reactor and the new window.
 event Enacted (target : Addr) (window : U256)
 
--- Entry enact (15 words): seq > castEnd, not enacted, m <= casts, the opening of T0 (two DLEQ shares of {1, 2}),
+-- Entry enactKit (15 words): seq > castEnd, not enacted, m <= casts, the opening of T0 (two DLEQ shares of {1, 2}),
 -- then the window moves to nextWindow, enacted is set, and the event Enacted logs the reactor and the new
 -- window (S5 O15: Out has no token transfer).
-def enact : (env : Env) -> (s : State) -> (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2x a2y b2x b2y z2 m : U256) -> Option (Prod State (List Out)) :=
+def enactKit : (env : Env) -> (s : State) -> (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2x a2y b2x b2y z2 m : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (d1x d1y a1x a1y b1x b1y z1 d2x d2y a2x a2y b2x b2y z2 m : U256) =>
     flagIf (u256Le (seq s) (castEnd s))
       none
@@ -419,7 +419,7 @@ def stageOf : (env : Env) -> (s : State) -> (ix iy : U256) -> U256 :=
         (u256Add (u256Add (mapGet (stage s) (hash (nullOf ix iy) 1u)) (mapGet (stage s) (hash (nullOf ix iy) 1u)))
           (u256Add (mapGet (stage s) (hash (nullOf ix iy) 1u)) (mapGet (stage s) (hash (nullOf ix iy) 1u)))))
 
--- Eval rows (test/eval/expect.txt): the 3 casts (ops 1 to 12), one more op (reslot), then enact at seq 13 > castEnd.
+-- Eval rows (test/eval/expect.txt): the 3 casts (ops 1 to 12), one more op (reslot), then enactKit at seq 13 > castEnd.
 def e0 : Env := makeEnv 0x00000000000000000000000000000000000000aa
 def v0sig : Option (Prod State (List Out)) := castSig e0 init b0ix b0iy b0j0c1x b0j0c1y b0j0c2x b0j0c2y b0j1c1x b0j1c1y b0j1c2x b0j1c2y b0c1 b0s1 b0s2 b0s3
 def v0slots : Option (Prod State (List Out)) := bind v0sig (fun (r : Prod State (List Out)) =>
@@ -442,7 +442,7 @@ def reslot : (s : State) -> Option (Prod State (List Out)) :=
   fun (s : State) => castSlot e0 s b2ix b2iy 1u b2j1a0x b2j1a0y b2j1b0x b2j1b0y b2j1a1x b2j1a1y b2j1b1x b2j1b1y b2j1e0 b2j1e1 b2j1z0 b2j1z1
 def v2late : Option (Prod State (List Out)) := bind v2 (fun (r : (Prod State (List Out))) => reslot (first r))
 def openWith : (m : U256) -> (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
-  fun (m : U256) (env : Env) (s : State) => enact env s tyd1x tyd1y tya1x tya1y tyb1x tyb1y tyz1 tyd2x tyd2y tya2x tya2y tyb2x tyb2y tyz2 m
+  fun (m : U256) (env : Env) (s : State) => enactKit env s tyd1x tyd1y tya1x tya1y tyb1x tyb1y tyz1 tyd2x tyd2y tya2x tya2y tyb2x tyb2y tyz2 m
 def stageSig : Option U256 := map (fun (r : Prod State (List Out)) => stageOf e0 (first r) b0ix b0iy) v0sig
 def stageSlots : Option U256 := map (fun (r : Prod State (List Out)) => stageOf e0 (first r) b0ix b0iy) v0slots
 def tallyHost : Option Flag := map (fun (r : Prod State (List Out)) =>
@@ -454,7 +454,7 @@ def sealEarly : Option (Prod State (List Out)) := bind v0sig (fun (r : Prod Stat
 -- sealLate: two more ops after the slots of voter 2, so its castSeal comes at seq 13 > castEnd 12.
 def sealLate : Option (Prod State (List Out)) := bind (bind v2slots (fun (r : (Prod State (List Out))) => reslot (first r))) (fun (a : (Prod State (List Out))) =>
   bind (reslot (first a)) (fun (b : (Prod State (List Out))) => castSeal e0 (first b) b2ix b2iy b2sumax b2sumay b2sumbx b2sumby b2sumz))
--- enactEarly: enact at seq 12 (not > castEnd 12).
+-- enactEarly: enactKit at seq 12 (not > castEnd 12).
 def enactEarly : Option (Prod State (List Out)) := bind v2 (fun (r : Prod State (List Out)) => openWith 2u e0 (first r))
 def enactM3 : Option (Prod State (List Out)) := bind v2late (fun (r : Prod State (List Out)) => openWith 3u e0 (first r))
 def windowAfter : Option U256 := map (fun (q : Prod State (List Out)) => windowNow e0 (first q)) (bind v2late (fun (r : Prod State (List Out)) => openWith 2u e0 (first r)))

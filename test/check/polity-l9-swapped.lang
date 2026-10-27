@@ -1,0 +1,4 @@
+-- L9 with the order swapped: amendAll folds the left factor first, so this
+-- law is refused.
+def l9Swapped : (ps : FreeMon Decided) -> (qs : FreeMon Decided) -> (s : Polity) -> Path Polity (amendAll (fmMul Decided ps qs) s) (amendAll ps (amendAll qs s)) :=
+  fun (ps : FreeMon Decided) (qs : FreeMon Decided) (s : Polity) => refl

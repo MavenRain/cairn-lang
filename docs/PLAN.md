@@ -19,8 +19,12 @@ code runs on secp256k1 through `group.h`, the hash is SHA-256, and the
 BN254 and Keccak code is gone (sections 6.1 and 9). S5 DONE: the record
 is a hash chain on SHA-256 (`snoc`, `head`, `len`, `verify`, `Inclusion`,
 `verifyAt`), the kernel checks laws L1 to L5 as paths (L4 and L5 on closed
-entries, O19), and `Out` has `emit` only (sections 9 and 10). Next: S6
-(Part D, the ballot and the DKG).
+entries, O19), and `Out` has `emit` only (sections 9 and 10). S6 DONE:
+Part D (the ballot, the tally, `decide`, `enact` and `amendAll`) is in
+the domain, the kernel checks laws L6 to L9 as paths in
+`examples/polity.lang` (L6 on closed boxes only, O22), and
+`src/front/dkg.c` deals and reshares the keys with no trusted dealer
+(V5). Next: S7 (threshold Schnorr for appends).
 
 ## 1. Rulings
 
@@ -116,7 +120,7 @@ removed:
 | open | primitive | `Quorum -> Enc A -> A`: `tOpen` valid shares, combined by Lagrange (MPC). |
 | decide | defined | `yes >= tAmend` on the opened tally. |
 | enact | defined | Replaces the constitution with the proposal. When `members` or a threshold changes, it needs a reshare (Q-S0-7). |
-| Deal, Reshare | primitive | Distributed key generation and resharing (Q-S0-7 (a)): a Pedersen DKG with Feldman commitments and a Schnorr proof of knowledge for each dealt secret, as in FROST KeyGen. Reshare preserves the existing public key with the old quorum's Lagrange weights (below). One run for `keyOpen` and one for `keyAppend`. intent-lang has only a trusted dealer (`thr_deal`); an off-chain DAO with no trusted party cannot use one. |
+| Deal, Reshare | primitive | Distributed key generation and resharing (Q-S0-7 (a)): a Pedersen DKG with Feldman commitments and a Schnorr proof of knowledge for each dealt secret, as in FROST KeyGen. Reshare preserves the existing public key with the old quorum's Lagrange weights (below). One run for `keyOpen` and one for `keyAppend`. intent-lang has only a trusted dealer (`thr_deal`); an off-chain DAO with no trusted party cannot use one. S6: `src/front/dkg.c` deals and reshares both keys, and `thr_deal` is for test vectors only (V5, docs/VALIDATION.md). |
 
 For each key, a reshare uses a quorum `Q` meeting that key's old threshold
 (`tOpen` or `tAppend`), with distinct nonzero share identifiers. Dealer
@@ -132,6 +136,15 @@ amend `tAmend`, the rule that decides amendments. Each proposal is decided
 by the constitution in force when it opens. So the step from one
 constitution to the next is a function, and a chain of amendments is a fold
 over a `FreeMon Proposal` (orbit-lang `amend`).
+
+Names in the domain (S6, Q-S6-1 (a), Q-S6-10 (a), Q-S6-12 (a)): the
+table names map to the names of `domain/domain.lang` as follows.
+Constitution is `Polity`, Member is `Point`, amend is `amendAll`, Ballot
+is `SealedBallot`, cast is `castBallot`, tallyEnc is `tallyBox`, count is
+`countVotes`, and decide is `decideYes`. `Proposal`, `Box`, `enact`,
+`Decided` and `stepD` keep their names. The kit step `enact` of
+`examples/daokit.lang` is now `enactKit`. Deal and Reshare are host C code
+in `src/front/dkg.c` (Q-S6-4 (a)), not domain defs.
 
 ### 3.3 Enc, ZK and MPC
 
@@ -308,10 +321,11 @@ Graded examples:
 The kit layout stays: `test/parse`, `test/check`, `test/eval`, `test/ir`,
 `test/fronttool.c`, `test/review.sh`, `test/gate.sh`. The ports add the
 intent-lang tools that stay (`test/elgamaltool.c`, `test/thresholdtool.c`
-and the Sigma and bLSAG tools). New: `test/json/` (A2), `test/mcp/` and
-`test/mcptool.c` (A4), `test/fmt/` (A1), the target vector rows (S8 to
-S10). Mutation: each slice that adds a refusal or a law kills at least one
-mutant of it, as in intent-lang.
+and the Sigma and bLSAG tools). New: `test/dkgtool.c` (S6, the DKG and
+the reshare), `test/json/` (A2), `test/mcp/` and `test/mcptool.c` (A4),
+`test/fmt/` (A1), the target vector rows (S8 to S10). Mutation: each
+slice that adds a refusal or a law kills at least one mutant of it, as in
+intent-lang.
 
 ## 9. Slices
 
@@ -323,8 +337,8 @@ mutant of it, as in intent-lang.
 | S3 | No time: remove the clock parts (4), add `REFUSE_TIME`, `OpPos` and `len`. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 195, kit-only refusals 24, evals 218, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1 (new), 11 tool regressions passed. Each count is at its target (`cairn-lang-work/S3-survey.md` section 4; examples 53 with the new `examples/oppos.lang`). Mutants KILLED: `epoch` out of `TIME_WORDS`; `fmEta` counts 2. `len` is a C builtin (section 4). |
 | S4 | The group and the hash (Q-S0-2 (a), Q-S0-3 (a)): a group interface `group.h` for the Sigma, ElGamal, threshold and bLSAG code; the secp256k1 field and group; SHA-256 (FIPS 180-4 vectors); remove `bn254.c`. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 192, kit-only refusals 22, evals 216, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 12 tool regressions passed (new: `shatool`). Each count is at its target (`cairn-lang-work/S4-survey.md` section 9). The drops are the ruled removals: check refusals 195 to 192 and kit-only refusals 24 to 22 (`base-ecpairing`, `pairing-list`, `base-ecrecover`), evals 218 to 216 (`recoverGood`, `recoverBad`). Mutants 2/2 KILLED: SHA-256 `K[0]` + 1 (`shatool`, 4 FAIL lines); the curve constant 7 to 5 (`secptool`, 3 FAIL lines). |
 | S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | DONE: `make -B check` EXIT 0; examples 54, parse refusals 19, check refusals 192, kit-only refusals 22, evals 227, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 12 tool regressions passed. Each count is at its target (`cairn-lang-work/S5-survey.md` section 4). The rises are the Part R rows: examples 53 to 54 (`examples/record.lang`), evals 216 to 227 (11 `record` rows; the target said about 226). `append` with `Constitution` and `Auth` moves to S7 (Q-S5-2 (a), O18). Mutants 6/6 KILLED: the `chainFrom` step without `H3 tagAppend`, and `snoc e r := r` (each a `PATH_END` check refusal); `verify` keeps the last position (row `verifyFirst`); `verify` without the `natEq f 0` guard (row `verifyMiss`); `verifyAt` without the first-entry check (row `verifyAtEntry`); the `u256IsSet` result type `U256` to `Nat` in `src/front/check.c` (a `TYPE_MISMATCH` check refusal). |
-| S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | NEXT |
-| S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | |
+| S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | DONE: `make -B check` EXIT 0; examples 55, parse refusals 19, check refusals 194, kit-only refusals 22, evals 237, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 13 tool regressions passed (new: `dkgtool`). Each count is at its target (`cairn-lang-work/S6-survey.md` section 4), but the evals target was 238: L6 (3 rows) and L7 are law rows in `examples/polity.lang`, not eval rows, so evals are 227 + 10 = 237. The rises are the Part D rows: examples 54 to 55 (`examples/polity.lang`), check refusals 192 to 194 (`polity-l9-swapped`, `polity-l8-nodecide`), evals 227 to 237 (10 `polity` rows). The DAO count is `countVotes` (Q-S6-12). Mutants 7/7 KILLED: `decideYes` with `tAmend + 1` (the L8 law, a `PATH_END` refusal of `polity.lang`); `amendAll` as a right fold (the L9 law, and `polity-l9-swapped` checks); the `tallyBox` unit `encEta 1` (the L6 law `l6Zero`); `castBallot` without the used-tag guard (row `castUsed`); `enact p s := s` (the L8 law); `dkg_reshare` without the Lagrange weight (`dkgtool`, 2 FAIL lines); `thr_close` at part t - 1 (`thresholdtool`, 5 FAIL lines). |
+| S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | NEXT |
 | S8 | Wasm: lower the ported core to the IR, the crypto prelude, differential vectors. | |
 | S9 | ES module + JSON: port `js.c` and `json.c`, the BigInt prelude, `REFUSE_TARGET_SECRET`. | |
 | S10 | WGSL: port `wgsl.c`, batch proof check and chain rehash kernels. | |
@@ -350,8 +364,10 @@ mutant of it, as in intent-lang.
   (`BLSAG_TAG` = 0x636169726e in `src/front/blsag.c`). The intent-lang tag
   was "orbit".
 - O6 `REFUSE_TARGET_SECRET` (S9) needs a sound mark of the secret values:
-  the shares, the nonces and the decryption key. S6 marks them in the
-  types.
+  the shares, the nonces and the decryption key. The plan said that S6
+  marks them in the types. S6 did not: the DKG and the reshare are host
+  C (`src/front/dkg.c`, Q-S6-4 (a)), so no guest type holds a share, a
+  nonce or the key. The mark stays open for S9.
 - O7 DONE (S4). The SHA-256 test vectors come from the published standard (FIPS
   180-4 and the NIST example values), not from another implementation
   that the gate would trust. The same holds for the secp256k1 constants
@@ -432,6 +448,12 @@ mutant of it, as in intent-lang.
   `examples/formers.lang:13` is a `FreeMon` now. S5 changed only the
   cites to removed or moved lines (F4, F15). S8 (the Wasm lower, O13)
   updates the file.
+- O22 (S6, Q-S6-3 (a)) L6 holds only on closed boxes of 0, 1 and 3
+  ballots (`examples/polity.lang`). `decrypt` does not reduce on a
+  variable ciphertext, and `fmFold` is not dependent. Thus L6 for each
+  box needs a dependent eliminator of `FreeMon` into propositions (an
+  `fmInd`: a new kernel rule and its fronttool rows). The kernel does not
+  have one. No slice owns this gap yet.
 
 ## 11. Questions for the USER (S0)
 

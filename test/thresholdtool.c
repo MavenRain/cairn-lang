@@ -2,7 +2,8 @@
    (the host lawQuorum), the opening agrees with elg_decrypt (the host
    lawOpen), a quorum opens a sum (the host lawTally), and the refusals of
    front/threshold.c. With the argument `words` it prints the chain constants
-   of examples/threshold.lang (slice S6 b3), one `name 0x<word>` per line. */
+   of examples/threshold.lang (slice S6 b3), one `name 0x<word>` per line.
+   The close rows (Q-S6-2 (a)) give thr_close the parts in arrival order. */
 #include <stdio.h>
 #include <string.h>
 
@@ -28,6 +29,17 @@ static void quorum(ThrPart *out, const ThrShare *shares, const uint32_t *idx, ui
   uint32_t i;
   for (i = 0; i < k; i++)
     thr_partial(&out[i], &shares[idx[i] - 1u], ct);
+}
+
+/* 1 when the K PARTS in arrival order close CT with EXPECT, at the index
+   WANT on THR_FOUND. */
+static int close_row(const char *name, const ThrPart *parts, uint32_t k, const GroupPoint *keys, const ElgCipher *ct, ThrResult expect, uint32_t want) {
+  uint32_t at = 0;
+  ThrResult got = thr_close(&at, parts, k, keys, T, N, ct);
+  if (got == expect && (expect != THR_FOUND || at == want))
+    return 1;
+  fprintf(stderr, "FAIL threshold close %s: result %d, at %u\n", name, (int)got, (unsigned)at);
+  return 0;
 }
 
 /* 1 when the K PARTS open CT to EXPECT, with the plaintext WANT on
@@ -163,6 +175,7 @@ int main(int argc, char **argv) {
   ThrShare shares[N];
   ThrPart parts[N];
   ThrPart bad[2];
+  ThrPart arrive[3];
   ElgCipher ct;
   ElgCipher a;
   ElgCipher b;
@@ -236,6 +249,14 @@ int main(int argc, char **argv) {
   fe_from_u64(&bad[0].d.x, 1u);
   fe_from_u64(&bad[0].d.y, 3u);
   ok &= row("D_1 off the curve", bad, 2u, keys, &ct, THR_REFUSED, 0u);
+  quorum(arrive, shares, s123, 3u, &ct);
+  ok &= close_row("t - 1 good parts", arrive, 1u, keys, &ct, THR_TOO_FEW, 0u);
+  ok &= close_row("t good parts", arrive, 2u, keys, &ct, THR_FOUND, 1u);
+  u256_add(&arrive[1].z, &arrive[1].z, &one);
+  ok &= close_row("a bad proof before the t-th", arrive, 3u, keys, &ct, THR_FOUND, 2u);
+  ok &= close_row("a bad proof, then no part", arrive, 2u, keys, &ct, THR_TOO_FEW, 0u);
+  arrive[1] = arrive[0];
+  ok &= close_row("x = 1 twice before the t-th", arrive, 3u, keys, &ct, THR_FOUND, 2u);
   if (!ok)
     return 1;
   puts("threshold regressions: passed");

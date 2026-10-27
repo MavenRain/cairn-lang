@@ -52,6 +52,7 @@ of each section gives its rule or ruling.
 | Part R, the record | `Digest`, `Entry`, `Record`, `snoc`, `tagGenesis`, `tagAppend`, `H3`, `chainFrom`, `head`, `opSucc`, `Verdict`, `verdictYes`, `foundAt`, `verify`, `prefix`, `Inclusion`, `recTake`, `recDrop`, `inclusion`, `verifyAt` |
 | The encrypted values | the sealed family `Enc`, `encBind`, `encMap`, `encOp2`, the law defs `decrypt` and `observe` |
 | Quorum and proofs | `Quorum`, the law def `open`, `ZKProof`, the sealed family `Transcript`, the law def `verified` |
+| Part D, the DAO | `Point`, `Count`, `verdictNo`, `isSetProd`, `encEtaOf`, `encIsSet`, `Polity`, `makePolity`, `members`, `tAppend`, `tAmend`, `tOpen`, `keyOpen`, `keyAppend`, `polityIsSet`, `Proposal`, `Bit`, `SealedBallot`, `mkBallot`, `ballotVote`, `linkTag`, `Box`, `tagUsed`, `castBallot`, `tallyBox`, `countVotes`, `Decided`, `decideYes`, `enact`, `stepD`, `amendAll` |
 | Positions, words and orbits | `Pos`, `Word`, `sizePred`, `consP`, `swapFront`, `actW`, `ChoiceBag`, `OrbitN` |
 | The charter | `Charter` (an inductive-inductive family) |
 | Equivalences | `isContr`, `fiber`, `isEquiv`, `Equiv`, `idEquiv`, `isoCap`, `isoPath`, `isoToEquiv`, `ua`, `uaArrow` |

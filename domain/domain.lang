@@ -246,6 +246,68 @@ def ZKProof : Type 0 -> Type 0 := fun (W : Type 0) => Trunc1 W
 sealed family Transcript (W : Type 0) := transcript (transcriptOf : W)
 law def verified : (W : Type 0) -> Transcript W -> ZKProof W :=
   fun (W : Type 0) (t : Transcript W) => trunc1 W (elim (fun (u : Transcript W) => W) (fun (w : W) => w) t)
+-- The DAO (S6, Q-S6-1 to Q-S6-12 (a)). A Point is a member key. A Polity
+-- is the constitution: the members, the thresholds tAppend, tAmend and
+-- tOpen, and the keys keyOpen and keyAppend. isSetProd gives the set
+-- proof of a product (a path in a product is a pair of paths). The
+-- checker has no eta rule for Enc, so encEtaOf proves it by elim, and
+-- encIsSet uses it in one hcomp (no trusted row). A SealedBallot holds an
+-- encrypted vote, a ZKProof that the vote is a bit, and a link tag.
+-- castBallot refuses a used link tag. tallyBox adds the votes under Enc,
+-- and countVotes adds the plain votes (L6). decideYes accepts when the
+-- yes count is at least tAmend of the Polity in force. stepD enacts an
+-- accepted proposal, and amendAll folds the decisions in order (L9).
+def Point : Type 0 := U256
+def Count : Type 0 := Nat
+def verdictNo : Verdict := flagNo
+def isSetProd : (A : Type 0) -> (B : Type 0) -> isSet A -> isSet B -> isSet (Prod A B) :=
+  fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) (x : Prod A B) (y : Prod A B) (p : Path (Prod A B) x y) (q : Path (Prod A B) x y) =>
+    fun (i : I) => fun (j : I) => pair ((sA (first x) (first y) (fun (k : I) => first (p @ k)) (fun (k : I) => first (q @ k)) @ i) @ j) ((sB (second x) (second y) (fun (k : I) => second (p @ k)) (fun (k : I) => second (q @ k)) @ i) @ j)
+def encEtaOf : (A : Type 0) -> (c : Enc A) -> Path (Enc A) (encEta A (encOf c)) c :=
+  fun (A : Type 0) (c : Enc A) => elim (fun (d : Enc A) => Path (Enc A) (encEta A (encOf d)) d) (fun (a : A) => refl) c
+def encIsSet : (A : Type 0) -> isSet A -> isSet (Enc A) :=
+  fun (A : Type 0) (sA : isSet A) (x : Enc A) (y : Enc A) (p : Path (Enc A) x y) (q : Path (Enc A) x y) =>
+    fun (i : I) => fun (j : I) => hcomp (Enc A) (~i \/ i \/ ~j \/ j) (fun (k : I) => [ ~i -> encEtaOf A (p @ j) @ k, i -> encEtaOf A (q @ j) @ k, ~j -> encEtaOf A x @ k, j -> encEtaOf A y @ k ])
+      (encEta A ((sA (encOf x) (encOf y) (fun (k : I) => encOf (p @ k)) (fun (k : I) => encOf (q @ k)) @ i) @ j))
+def Polity : Type 0 := Prod (FreeMon Point) (Prod Nat (Prod Nat (Prod Nat (Prod Point Point))))
+def makePolity : FreeMon Point -> Nat -> Nat -> Nat -> Point -> Point -> Polity :=
+  fun (m : FreeMon Point) (a : Nat) (b : Nat) (c : Nat) (ko : Point) (ka : Point) => pair m (pair a (pair b (pair c (pair ko ka))))
+def members : Polity -> FreeMon Point := fun (s : Polity) => first s
+def tAppend : Polity -> Nat := fun (s : Polity) => first (second s)
+def tAmend : Polity -> Nat := fun (s : Polity) => first (second (second s))
+def tOpen : Polity -> Nat := fun (s : Polity) => first (second (second (second s)))
+def keyOpen : Polity -> Point := fun (s : Polity) => first (second (second (second (second s))))
+def keyAppend : Polity -> Point := fun (s : Polity) => second (second (second (second (second s))))
+def polityIsSet : isSet Polity :=
+  isSetProd (FreeMon Point) (Prod Nat (Prod Nat (Prod Nat (Prod Point Point)))) (fmIsSet Point)
+    (isSetProd Nat (Prod Nat (Prod Nat (Prod Point Point))) natIsSet
+      (isSetProd Nat (Prod Nat (Prod Point Point)) natIsSet
+        (isSetProd Nat (Prod Point Point) natIsSet (isSetProd Point Point u256IsSet u256IsSet))))
+def Proposal : Type 0 := Polity
+def Bit : Enc Verdict -> Type 0 :=
+  fun (c : Enc Verdict) => Sigma (v : Verdict) (Path (Enc Verdict) (encEta Verdict v) c)
+def SealedBallot : Type 0 := Sigma (c : Enc Verdict) (Prod (ZKProof (Bit c)) Digest)
+def mkBallot : Verdict -> Digest -> SealedBallot :=
+  fun (v : Verdict) (t : Digest) => pack (encEta Verdict v) (pair (trunc1 (Bit (encEta Verdict v)) (pack v refl)) t)
+def ballotVote : SealedBallot -> Enc Verdict := fun (b : SealedBallot) => witness b
+def linkTag : SealedBallot -> Digest := fun (b : SealedBallot) => second (payload b)
+def Box : Type 0 := FreeMon SealedBallot
+def tagUsed : Digest -> Box -> Flag :=
+  fun (t : Digest) (box : Box) => fmChain SealedBallot Flag flagIsSet (fun (f : Flag) (x : SealedBallot) => flagIf (u256Eq (linkTag x) t) flagYes f) flagNo box
+def castBallot : Proposal -> SealedBallot -> Box -> Option Box :=
+  fun (p : Proposal) (b : SealedBallot) (box : Box) => flagIf (tagUsed (linkTag b) box) none (some (fmMul SealedBallot box (fmEta SealedBallot b)))
+def tallyBox : Box -> Enc Count :=
+  fun (box : Box) => fmChain SealedBallot (Enc Count) (encIsSet Count natIsSet)
+    (fun (t : Enc Count) (b : SealedBallot) => encOp2 Count Flag Count (fun (n : Count) (f : Flag) => flagIf f (natAdd n 1) n) t (ballotVote b)) (encEta Count 0) box
+def countVotes : FreeMon Verdict -> Count :=
+  fun (vs : FreeMon Verdict) => fmChain Verdict Count natIsSet (fun (n : Count) (f : Verdict) => flagIf f (natAdd n 1) n) 0 vs
+def Decided : Type 0 := Prod Proposal Count
+def decideYes : Polity -> Count -> Flag := fun (s : Polity) (y : Count) => natLe (tAmend s) y
+def enact : Proposal -> Polity -> Polity := fun (p : Proposal) (s : Polity) => p
+def stepD : Polity -> Decided -> Polity :=
+  fun (s : Polity) (d : Decided) => flagIf (decideYes s (second d)) (enact (first d) s) s
+def amendAll : FreeMon Decided -> Polity -> Polity :=
+  fun (ds : FreeMon Decided) (s : Polity) => fmChain Decided Polity polityIsSet stepD s ds
 -- The positions of a bag (S7 B3, Q4): Pos n has n values, the first
 -- position at each szS and a lift of each position of the tail. No
 -- constructor gives Pos sz0. A domain family, so Fin stays internal (O23).

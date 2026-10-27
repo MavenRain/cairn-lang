@@ -1,0 +1,59 @@
+-- The DAO (S6, Q-S6-9 (a)): G3 cast and tally, G4 amend tAppend, G5 amend
+-- tAmend. The file is a guest: it names the domain defs only. The counts come
+-- from len and opSucc, and the points and tags are head digests (no literal).
+def zero : Count := len Point (fmUnit Point)
+def one : Count := opSucc zero
+def two : Count := opSucc one
+def three : Count := opSucc two
+def r0 : Record := fmUnit Entry
+def k1 : Point := head r0
+def r1 : Record := snoc k1 r0
+def k2 : Point := head r1
+def r2 : Record := snoc k2 r1
+def k3 : Point := head r2
+def r3 : Record := snoc k3 r2
+def k4 : Point := head r3
+def crew : FreeMon Point := fmMul Point (fmMul Point (fmEta Point k1) (fmEta Point k2)) (fmEta Point k3)
+def s0 : Polity := makePolity crew two two two k1 k2
+def pAppend : Proposal := makePolity crew three two two k1 k3
+def pLower : Proposal := makePolity crew two one two k1 k2
+def pOpen : Proposal := makePolity crew two one three k1 k2
+def b1 : SealedBallot := mkBallot verdictYes k2
+def b2 : SealedBallot := mkBallot verdictNo k3
+def b3 : SealedBallot := mkBallot verdictYes k4
+def box0 : Box := fmUnit SealedBallot
+def box1 : Box := fmMul SealedBallot box0 (fmEta SealedBallot b1)
+def box3 : Box := fmMul SealedBallot (fmMul SealedBallot box1 (fmEta SealedBallot b2)) (fmEta SealedBallot b3)
+
+-- L6 (Q-S6-3 (a)) on closed boxes of 0, 1 and 3 ballots: the opened tally is
+-- the count of the plain votes.
+def l6Zero : (q : Quorum) -> Path Count (open Count q (tallyBox box0)) (countVotes (fmMap SealedBallot Verdict (fun (x : SealedBallot) => decrypt Verdict (ballotVote x)) box0)) :=
+  fun (q : Quorum) => refl
+def l6One : (q : Quorum) -> Path Count (open Count q (tallyBox box1)) (countVotes (fmMap SealedBallot Verdict (fun (x : SealedBallot) => decrypt Verdict (ballotVote x)) box1)) :=
+  fun (q : Quorum) => refl
+def l6Three : (q : Quorum) -> Path Count (open Count q (tallyBox box3)) (countVotes (fmMap SealedBallot Verdict (fun (x : SealedBallot) => decrypt Verdict (ballotVote x)) box3)) :=
+  fun (q : Quorum) => refl
+-- L7 (Q-S6-2 (a)): open is decrypt for each quorum and ciphertext.
+def l7 : (q : Quorum) -> (c : Enc Count) -> Path Count (open Count q c) (decrypt Count c) :=
+  fun (q : Quorum) (c : Enc Count) => refl
+-- L8 on the closed s0 (tAmend two): a yes count of two meets the threshold,
+-- so the step enacts p.
+def l8 : (p : Proposal) -> Path Polity (stepD s0 (pair p two)) p :=
+  fun (p : Proposal) => refl
+-- L9 (Q-S6-6 (a)): amendAll folds the left factor first.
+def l9 : (ps : FreeMon Decided) -> (qs : FreeMon Decided) -> (s : Polity) -> Path Polity (amendAll (fmMul Decided ps qs) s) (amendAll qs (amendAll ps s)) :=
+  fun (ps : FreeMon Decided) (qs : FreeMon Decided) (s : Polity) => refl
+
+-- Eval rows: the tally of 0, 1 and 3 ballots, the plain count, a cast with a
+-- used tag, decideYes at and below the threshold, G4, a refused amendment and
+-- G5 (pLower lowers tAmend, so pOpen passes with one yes vote).
+def tallyZero : Enc Count := tallyBox box0
+def tallyOne : Enc Count := tallyBox box1
+def tallyThree : Enc Count := tallyBox box3
+def countThree : Count := countVotes (fmMul Verdict (fmMul Verdict (fmEta Verdict verdictYes) (fmEta Verdict verdictNo)) (fmEta Verdict verdictYes))
+def castUsed : Option Box := castBallot pAppend b1 box1
+def decideExact : Verdict := decideYes s0 two
+def decideShort : Verdict := decideYes s0 one
+def g4Append : Count := tAppend (stepD s0 (pair pAppend two))
+def g4Refused : Count := tAppend (stepD s0 (pair pAppend one))
+def g5Open : Count := tOpen (amendAll (fmMul Decided (fmEta Decided (pair pLower two)) (fmEta Decided (pair pOpen one))) s0)
