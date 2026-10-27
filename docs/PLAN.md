@@ -24,7 +24,11 @@ Part D (the ballot, the tally, `decide`, `enact` and `amendAll`) is in
 the domain, the kernel checks laws L6 to L9 as paths in
 `examples/polity.lang` (L6 on closed boxes only, O22), and
 `src/front/dkg.c` deals and reshares the keys with no trusted dealer
-(V5). Next: S7 (threshold Schnorr for appends).
+(V5). S7 DONE: `append` takes an `Auth`, a FROST threshold Schnorr
+signature under `keyAppend` that the builtin `schnorrOk` checks
+(`src/front/frost.c`), the kernel checks laws L10 and L11 as paths in
+`examples/append.lang`, and `langc run` appends each `Out` entry to the
+record (O18 and O20). Next: S8 (Wasm).
 
 ## 1. Rulings
 
@@ -96,8 +100,8 @@ chain.
 |---|---|---|
 | Entry | defined | `Digest`: one content hash. The record holds hashes, never content. |
 | Record | defined | `FreeMon Entry` (a CM). The only producer is `append`. |
-| Auth | primitive | One threshold Schnorr signature of the current append committee on `(head r, e)`, under `keyAppend` (Q-S0-5 (a): FROST style, two MPC rounds; the check is one Schnorr verification). |
-| append | defined | `Constitution -> Auth -> Entry -> Record -> Option Record`. It checks `Auth` and then adds `e` at the end. There is no delete and no update: no operation takes a record to a shorter record. |
+| Auth | primitive | One threshold Schnorr signature of the current append committee on `(head r, e)`, under `keyAppend` (Q-S0-5 (a): FROST style, two MPC rounds; the check is one Schnorr verification). S7 (Q-S7-6 (a)): the domain `family Auth := authOf (authR : U256) (authZ : U256)` (`domain/domain.lang:292`), checked by the kernel builtin `schnorrOk`. Constitution = the domain `Polity` (Q-S6-1 (a)). |
+| append | defined | `Constitution -> Auth -> Entry -> Record -> Option Record`. It checks `Auth` and then adds `e` at the end. There is no delete and no update: no operation takes a record to a shorter record. S7 (Q-S7-1 (a)): `append : Polity -> Auth -> Entry -> Record -> Option Record` (`domain/domain.lang:297`), one def over `snoc`. Constitution = the domain `Polity` (Q-S6-1 (a)). |
 | head | defined | `Record -> Digest`. The hash chain: `head nil = H(tag_genesis)` and `head (append e r) = H(tag_append, head r, e)`, with `H` = SHA-256 (Q-S0-3 (a), Q-S0-6 (a)). |
 | Pos | defined | `Nat`, by `len : Record -> Nat`, the monoid map of `FreeMon` to `Nat`. |
 | verify | defined | `Digest -> Record -> Option Pos`: the first position of a digest. |
@@ -172,6 +176,22 @@ scheme is not in the kit.
 
 TCM law of the tally (from intent-lang): `open q (tallyEnc bs) ≡ count
 (map decrypt bs)`.
+
+The append signature (S7, Q-S7-2 to Q-S7-5 and Q-S7-8 (a)). An `Auth` is
+a FROST signature: Komlo and Goldberg, "FROST: Flexible Round-Optimized
+Schnorr Threshold Signatures" (SAC 2020, IACR ePrint 2020/852), in the
+two-round shape of RFC 9591 (June 2024). `src/front/frost.c` signs on
+secp256k1 with SHA-256. Keys and nonces are x-only, with the smaller y
+(the `group_lift_x` rule). In round 1, each signer publishes two nonce
+commitments. The nonces are fresh for each session. In round 2, each
+signer gets its own binding factor over the list of the round 1
+commitments. The aggregator checks each share. On a bad share, it stops
+and gives the index of the first bad signer (identifiable abort). The
+hashes are the cairn tag chains of SHA-256, not the RFC 9591 ciphersuite
+hashes, so the RFC 9591 test vectors do not apply. The guest checks the
+signature with the kernel builtin `schnorrOk` (z G = R + c P). The
+signing is host C, so a share is never a guest value (the Q-S6-4
+precedent).
 
 ## 4. Time
 
@@ -338,8 +358,8 @@ intent-lang.
 | S4 | The group and the hash (Q-S0-2 (a), Q-S0-3 (a)): a group interface `group.h` for the Sigma, ElGamal, threshold and bLSAG code; the secp256k1 field and group; SHA-256 (FIPS 180-4 vectors); remove `bn254.c`. | DONE: `make -B check` EXIT 0; examples 53, parse refusals 19, check refusals 192, kit-only refusals 22, evals 216, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 12 tool regressions passed (new: `shatool`). Each count is at its target (`cairn-lang-work/S4-survey.md` section 9). The drops are the ruled removals: check refusals 195 to 192 and kit-only refusals 24 to 22 (`base-ecpairing`, `pairing-list`, `base-ecrecover`), evals 218 to 216 (`recoverGood`, `recoverBad`). Mutants 2/2 KILLED: SHA-256 `K[0]` + 1 (`shatool`, 4 FAIL lines); the curve constant 7 to 5 (`secptool`, 3 FAIL lines). |
 | S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | DONE: `make -B check` EXIT 0; examples 54, parse refusals 19, check refusals 192, kit-only refusals 22, evals 227, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 12 tool regressions passed. Each count is at its target (`cairn-lang-work/S5-survey.md` section 4). The rises are the Part R rows: examples 53 to 54 (`examples/record.lang`), evals 216 to 227 (11 `record` rows; the target said about 226). `append` with `Constitution` and `Auth` moves to S7 (Q-S5-2 (a), O18). Mutants 6/6 KILLED: the `chainFrom` step without `H3 tagAppend`, and `snoc e r := r` (each a `PATH_END` check refusal); `verify` keeps the last position (row `verifyFirst`); `verify` without the `natEq f 0` guard (row `verifyMiss`); `verifyAt` without the first-entry check (row `verifyAtEntry`); the `u256IsSet` result type `U256` to `Nat` in `src/front/check.c` (a `TYPE_MISMATCH` check refusal). |
 | S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | DONE: `make -B check` EXIT 0; examples 55, parse refusals 19, check refusals 194, kit-only refusals 22, evals 237, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 13 tool regressions passed (new: `dkgtool`). Each count is at its target (`cairn-lang-work/S6-survey.md` section 4), but the evals target was 238: L6 (3 rows) and L7 are law rows in `examples/polity.lang`, not eval rows, so evals are 227 + 10 = 237. The rises are the Part D rows: examples 54 to 55 (`examples/polity.lang`), check refusals 192 to 194 (`polity-l9-swapped`, `polity-l8-nodecide`), evals 227 to 237 (10 `polity` rows). The DAO count is `countVotes` (Q-S6-12). Mutants 7/7 KILLED: `decideYes` with `tAmend + 1` (the L8 law, a `PATH_END` refusal of `polity.lang`); `amendAll` as a right fold (the L9 law, and `polity-l9-swapped` checks); the `tallyBox` unit `encEta 1` (the L6 law `l6Zero`); `castBallot` without the used-tag guard (row `castUsed`); `enact p s := s` (the L8 law); `dkg_reshare` without the Lagrange weight (`dkgtool`, 2 FAIL lines); `thr_close` at part t - 1 (`thresholdtool`, 5 FAIL lines). |
-| S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | NEXT |
-| S8 | Wasm: lower the ported core to the IR, the crypto prelude, differential vectors. | |
+| S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | DONE: `make -B check` EXIT 0; examples 57, parse refusals 19, check refusals 196, kit-only refusals 22, evals 245, proves 2, build refusals 1, guest differential 28, runs 7, run refusals 11, time hint 1, 11 interpreter regressions and 14 tool regressions passed (new: `frosttool`). Each count is at its target (`cairn-lang-work/S7-survey.md` section 4), but the examples target was 56: `examples/outlog.lang` is the run program of the host append (O20), so examples are 55 + 2 = 57. The rises are the append rows: examples 55 to 57 (`examples/append.lang`, `examples/outlog.lang`), check refusals 194 to 196 (`schnorr-type`, `append-swap`), evals 237 to 245 (8 `append` rows), runs 6 to 7 (`outlog`). `append` takes an `Auth` (O18) and `langc run` appends each `Out` entry to the record (O20). Mutants 9/9 KILLED: `frost_rho` without the list B (`frosttool`, 2 FAIL lines); the challenge without head r (the L10 law, a `PATH_END` refusal of `append.lang`, and `frosttool` KAT c); the aggregator without the share check (`frosttool`, 2 FAIL lines); lambda over the indices 1 to 8, not the set S (`frosttool`, 7 FAIL lines); no negation for the key with the larger y (`frosttool`, 2 FAIL lines); `schnorrOk` without the z test (the L11 law); `append` with the `flagIf` branches swapped (the L10 law); the nonce without SEED (`frosttool`, 2 FAIL lines); the run entry without the tag (`run gate: 1 failures`). |
+| S8 | Wasm: lower the ported core to the IR, the crypto prelude, differential vectors. | NEXT |
 | S9 | ES module + JSON: port `js.c` and `json.c`, the BigInt prelude, `REFUSE_TARGET_SECRET`. | |
 | S10 | WGSL: port `wgsl.c`, batch proof check and chain rehash kernels. | |
 | S11 | A1: canonical forms and `langc fmt`. | |
@@ -431,7 +451,11 @@ intent-lang.
   `OP_REFL` are not declared in the ported `core.h`. This was so before S4.
   The file is out of the build (O13), so the gate does not see it. S8
   adapts the file (6.1).
-- O18 (S5, Q-S5-2 (a)) `append` is not in S5. S5 builds the total
+- O18 DONE (S7, Q-S7-1 (a)). `append` is one domain def over `snoc`
+  (`domain/domain.lang:297`): `some (snoc e r)` when `authOk` accepts the
+  Auth, else `none`. Constitution = the domain `Polity` (Q-S6-1 (a)).
+  `examples/append.lang` holds the laws L10 and L11. The S5 text:
+  (S5, Q-S5-2 (a)) `append` is not in S5. S5 builds the total
   `snoc` (the entry goes at the end, Q-S5-1 (a)), `head`, `len`,
   `verify`, `Inclusion` and `verifyAt`, and states L1 to L5 on `snoc`.
   S7 adds `append` with `Constitution` and `Auth` as one def over `snoc`:
@@ -440,7 +464,16 @@ intent-lang.
   the kernel does not reduce `u256Eq` on a variable. Thus
   `examples/record.lang` proves L4 and L5 only for closed entries. No
   slice owns this gap yet.
-- O20 (S5, Q-S5-7 (a)) The host append goes to S7: `langc run` hashes
+- O20 DONE (S7, Q-S7-9 (a), narrowed). `langc run` hashes each `emit`
+  value of `Out` to an `Entry` (the chain of `hash` from the tag
+  "cairn-out" over the emit tag and each field word) and puts it in the
+  record with the domain hash chain (H3 tagAppend). It prints `entry
+  0x...` under each such `Out` line and `head 0x...` after the state
+  line. An event is not an entry. A run with no entry prints no head
+  line. The run holds no shares, so it does not sign (O23).
+  `examples/outlog.lang` and `test/run/outlog.script` are the run row. The
+  S5 text:
+  (S5, Q-S5-7 (a)) The host append goes to S7: `langc run` hashes
   each `Out` value to an `Entry` and appends it to the record under the
   committee key.
 - O21 (S5) `formers/tcc-wasm.md` is older than `FreeMon`: row F4 still
@@ -454,6 +487,10 @@ intent-lang.
   box needs a dependent eliminator of `FreeMon` into propositions (an
   `fmInd`: a new kernel rule and its fronttool rows). The kernel does not
   have one. No slice owns this gap yet.
+- O23 (S7, Q-S7-9 (a)) `langc run` prints the message `(head r, e)` that
+  the append committee signs, but it does not check an Auth. A `langc
+  run` that checks a given Auth under `keyAppend` is open. No slice owns
+  this gap yet.
 
 ## 11. Questions for the USER (S0)
 

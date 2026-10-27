@@ -7,6 +7,7 @@
 #include "front/blsag.h"
 #include "front/lexer.h"
 #include "front/parser.h"
+#include "sha256.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -211,6 +212,7 @@ static const Builtin BUILTINS[] = {
   {"zkDigest", 1, RULE_FIXED, OP_ZK_DIGEST, OP_U256, 0, VIS_INTERNAL},
   {"zkSign", 4, RULE_FIXED, OP_ZK_SIGN, OP_LIST, 0, VIS_INTERNAL},
   {"zkVerify", 4, RULE_FIXED, OP_ZK_VERIFY, OP_FLAG, 0, VIS_INTERNAL},
+  {"schnorrOk", 5, RULE_FIXED, OP_SCHNORR_OK, OP_FLAG, 0, VIS_INTERNAL},
   {"ZkBallot", 1, RULE_TYPE1, OP_ZK_BALLOT, OP_NAT, 0, VIS_INTERNAL},
   {"ZkWitness", 0, RULE_TYPE0, OP_ZK_WITNESS, OP_NAT, 0, VIS_INTERNAL},
   {"zkCast", 4, RULE_ZK_CAST, OP_ZK_CAST, OP_ZK_BALLOT, 0, VIS_INTERNAL},
@@ -2196,7 +2198,7 @@ static const Core *rule_prim(Call *k, Op arg) {
 
 static uint32_t find_family(const Machine *m, const char *name);
 
-/* The curve ops (S2, R17) and the zk ops (S8 B2a): fixed signatures over
+/* The curve ops (S2, R17), the zk ops (S8 B2a) and schnorrOk (S7 B3): fixed signatures over
    U256, Nat, a point Prod U256 U256, a ring List of points and a word list
    List U256. The result is the row result; OP_PROD in the row means a point
    and OP_LIST means List U256. */
@@ -2204,7 +2206,7 @@ static const Core *rule_fixed(Call *k) {
   enum { SHAPE_U256, SHAPE_NAT, SHAPE_POINT, SHAPE_RING, SHAPE_WORDS };
   static const struct {
     Op op;
-    unsigned char arg[4];
+    unsigned char arg[5];
   } ROWS[] = {
     {OP_EC_ADD, {SHAPE_POINT, SHAPE_POINT, SHAPE_U256, SHAPE_U256}},
     {OP_EC_MUL, {SHAPE_POINT, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
@@ -2213,16 +2215,17 @@ static const Core *rule_fixed(Call *k) {
     {OP_ZK_DIGEST, {SHAPE_RING, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
     {OP_ZK_SIGN, {SHAPE_RING, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
     {OP_ZK_VERIFY, {SHAPE_RING, SHAPE_U256, SHAPE_U256, SHAPE_WORDS}},
+    {OP_SCHNORR_OK, {SHAPE_U256, SHAPE_U256, SHAPE_U256, SHAPE_U256, SHAPE_U256}},
   };
   Checker *c = k->c;
   const Value *u = tyop(c, OP_U256, 0, NULL, NULL, NULL);
   const Value *point = tyop(c, OP_PROD, 2, u, u, NULL);
   const Value *words = tyop(c, OP_LIST, 1, u, NULL, NULL);
   const Value *shape[5] = {u, nat_type(c), point, tyop(c, OP_LIST, 1, point, NULL, NULL), words};
-  const Core *args[4] = {NULL, NULL, NULL, NULL};
+  const Core *args[5] = {NULL, NULL, NULL, NULL, NULL};
   size_t row = 0;
   while (row < sizeof ROWS / sizeof ROWS[0] && ROWS[row].op != k->b->op) row++;
-  if (row == sizeof ROWS / sizeof ROWS[0] || k->b->arity > 4u) return NULL;
+  if (row == sizeof ROWS / sizeof ROWS[0] || k->b->arity > 5u) return NULL;
   for (uint32_t i = 0; i < k->b->arity; i++) {
     args[i] = check(c, k->args[i], shape[ROWS[row].arg[i]]);
     if (args[i] == NULL) return NULL;
@@ -4877,7 +4880,8 @@ typedef struct {
 } RunCall;
 
 /* A run: the script path, the prelude families, the calls so far, the
-   current state and a print buffer of PRINT_MAX bytes. */
+   current state, a print buffer of PRINT_MAX bytes, and the head and the
+   entry count of the run record (S7, O20). */
 typedef struct {
   const char *path;
   uint32_t env;
@@ -4885,6 +4889,8 @@ typedef struct {
   uint32_t calls;
   const Value *state;
   char *buf;
+  U256 head;
+  uint32_t entries;
 } Run;
 
 static uint32_t find_family(const Machine *m, const char *name) {
@@ -4958,6 +4964,44 @@ static const Value *make_env(Machine *m, const Run *r, const U256 *caller) {
   return args[0] == NULL ? NULL : val_op(m, VAL_OP, OP_CTOR, m->families[r->env].first_ctor, 0, args, 1u);
 }
 
+/* The tags of the run record: the ASCII bytes of "cairn-genesis" and
+   "cairn-append" as a big-endian U256 (domain/domain.lang, tagGenesis and
+   tagAppend), and of "cairn-out" (S7, O20). */
+static const U256 TAG_GENESIS = {{0x2d67656e65736973u, 0x636169726eu, 0u, 0u}};
+static const U256 TAG_APPEND = {{0x6e2d617070656e64u, 0x63616972u, 0u, 0u}};
+static const U256 TAG_OUT = {{0x6169726e2d6f7574u, 0x63u, 0u, 0u}};
+static const U256 WORD_ZERO = {{0u, 0u, 0u, 0u}};
+
+static void print_digest(FILE *out, const char *name, const U256 *w) {
+  fprintf(out, "%s 0x%016llx%016llx%016llx%016llx\n", name, (unsigned long long)w->limb[3], (unsigned long long)w->limb[2],
+          (unsigned long long)w->limb[1], (unsigned long long)w->limb[0]);
+}
+
+/* The host append (S7, O20, Q-S7-9 (a)). An Out value `emit tag fields` is a
+   record entry: the chain of hash from TAG_OUT over the tag and each word of
+   the fields. The run puts the entry at the end of its record, so the head
+   becomes hash (hash tagAppend head) entry (the domain H3), and prints the
+   entry. An event is not an entry. The run holds no shares, so it does not
+   sign (O23). */
+static void run_append(const Machine *m, Run *r, const Value *o, FILE *out) {
+  const Value *f;
+  U256 e;
+  U256 h;
+  if (!val_is(o, OP_CTOR) || o->argc != 2u || o->inst >= m->ctor_count || m->ctors[o->inst].family != r->out || m->ctors[o->inst].event ||
+      o->args[0]->kind != VAL_NAT)
+    return;
+  u256_from_u64(&h, o->args[0]->nat);
+  sha256_words(&e, &TAG_OUT, &h);
+  for (f = o->args[1]; val_is(f, OP_CONS) && f->args[0]->kind == VAL_WORD; f = f->args[1]) {
+    h = e;
+    sha256_words(&e, &h, f->args[0]->word);
+  }
+  sha256_words(&h, &TAG_APPEND, &r->head);
+  sha256_words(&r->head, &h, &e);
+  r->entries++;
+  print_digest(out, "  entry", &e);
+}
+
 /* One call `CALLER NAME ARGS...` (D-6 to D-8). A trap is a revert: the
    state does not change. Returns 0, 1, or 2 after EVAL_ARGS. */
 static int run_call(Machine *m, Run *r, uint32_t line, char *const *word, uint32_t count, FILE *out) {
@@ -5018,6 +5062,7 @@ static int run_call(Machine *m, Run *r, uint32_t line, char *const *word, uint32
     if (!print_value(m, o, r->buf))
       return 1;
     fprintf(out, "  %s%s\n", val_is(o, OP_CTOR) && o->inst < m->ctor_count && m->ctors[o->inst].event ? "event " : "", r->buf);
+    run_append(m, r, o, out);
   }
   return 0;
 }
@@ -5052,6 +5097,7 @@ int run_command(Machine *m, const char *path, const char *text, size_t len, FILE
   r.env = find_family(m, "Env");
   r.out = find_family(m, "Out");
   r.buf = arena_alloc(m->arena, PRINT_MAX);
+  sha256_words(&r.head, &TAG_GENESIS, &WORD_ZERO);
   m->def = "init";
   if (!m->has_state || init == NO_DEF || !is_family(m->defs[init].type, m->state_family) || r.env == NO_FAMILY)
     return diag_fail(m->diag, "RUN_INIT", NULL, "a run needs a state and def init : State") + 1;
@@ -5088,5 +5134,7 @@ int run_command(Machine *m, const char *path, const char *text, size_t len, FILE
   if (!print_value(m, r.state, r.buf))
     return 1;
   fprintf(out, "state %s\n", r.buf);
+  if (r.entries > 0u)
+    print_digest(out, "head", &r.head);
   return 0;
 }

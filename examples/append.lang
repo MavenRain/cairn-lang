@@ -1,0 +1,32 @@
+-- G2 (S7, Q-S7-1 .. Q-S7-7 (a)): the append check of a 2 of 3 committee. A
+-- kit file: the keys, the head and the signature words come from
+-- build/frosttool (test/frosttool.c). The committee is as dkgtool key_run:
+-- 2 of 3, then the reshare to 3 of 4 under the same key. The message is
+-- (head r0, 42u), with r0 the empty record. pol has keyAppend kA, and polO
+-- has keyAppend kO (another key, so a signature under kA fails).
+def kA : Point := 0x987fb549d982c26644ae1a92fbdf96fd1c767cc63a42014959ccdb676f405889u
+def kO : Point := 0xf7f36a2ad3963a54863980b0ddf4c0cab710f2f1d88e3102eca3ec0429bc67e7u
+def pol : Polity := makePolity (fmUnit Point) 2 2 2 kO kA
+def polO : Polity := makePolity (fmUnit Point) 2 2 2 kA kO
+def r0 : Record := fmUnit Entry
+def r1 : Record := snoc 7u r0
+def goodA : Auth := authOf 0x63c55ee48262d59010d57436eb0b08a2ebfbdb4260c79782b14ce492739d695au 0xb5b183ab4ae8de8398af4513f5e2547ed261b7cc140b3379f9923c8fba54a82eu
+def badA : Auth := authOf 0x63c55ee48262d59010d57436eb0b08a2ebfbdb4260c79782b14ce492739d695au 0xb5b183ab4ae8de8398af4513f5e2547ed261b7cc140b3379f9923c8fba54a82fu
+def a34 : Auth := authOf 0x451fbe671a4efbea99136c045004275fd40f8c1e81667155c1c169b3c7dd3b23u 0x3e46510d5bcc6c7d1923955848778852eaff0af1ef2d454d6f55ebe6439635ddu
+
+-- L10 (Q-S7-7 (a)): a good Auth puts the entry at the end of the record.
+def l10 : Path (Option Record) (append pol goodA 42u r0) (some (snoc 42u r0)) := refl
+-- L11: the same Auth with z + 1 gives none.
+def l11 : Path (Option Record) (append pol badA 42u r0) none := refl
+
+-- Eval rows: a good Auth, z + 1, the Auth on another head, on another entry,
+-- under the other key, the length and the head after the append, and the
+-- 3 of 4 key after the reshare (signers 2, 3 and 4).
+def appGood : Option Record := append pol goodA 42u r0
+def appBad : Option Record := append pol badA 42u r0
+def appHead : Option Record := append pol goodA 42u r1
+def appEntry : Option Record := append pol goodA 43u r0
+def appOpen : Option Record := append polO goodA 42u r0
+def lenAfter : Option Flag := map (fun (x : Record) => natEq (len Entry x) (natAdd (len Entry r0) 1)) (append pol goodA 42u r0)
+def headAfter : Option Flag := map (fun (x : Record) => u256Eq (head x) (H3 tagAppend (head r0) 42u)) (append pol goodA 42u r0)
+def app34 : Option Record := append pol a34 42u r0

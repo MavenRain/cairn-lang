@@ -5,13 +5,14 @@ TCC ?= tcc
 CC ?= cc
 CFLAGS = -std=c99 -Wall -Werror -Isrc
 CLANG_FLAGS = -std=c99 -Wall -Wextra -Wswitch-enum -Werror -fsyntax-only -Isrc
-FRONT = src/front/base.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/eval.c src/front/check.c src/sha256.c
+FRONT = src/front/base.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/frost.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/eval.c src/front/check.c src/sha256.c
 SRC = src/main.c $(FRONT)
 FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c,$(FRONT))
 BLSAG_TOOL = test/blsagtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/sha256.c
 ELGAMAL_TOOL = test/elgamaltool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/sha256.c
 THRESHOLD_TOOL = test/thresholdtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/sha256.c
 DKG_TOOL = test/dkgtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/dkg.c src/sha256.c
+FROST_TOOL = test/frosttool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/dkg.c src/front/frost.c src/sha256.c
 SIGMA_TOOL = test/sigmatool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/sigma.c src/sha256.c
 BALLOT_TOOL = test/ballottool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/sigma.c src/sha256.c
 SECP_TOOL = test/secptool.c src/front/u256.c src/front/field.c src/front/secp256k1.c
@@ -22,7 +23,7 @@ HEADERS = $(wildcard src/*.h src/front/*.h)
 
 .PHONY: build check check-clang clean
 
-build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/ballottool build/secptool build/shatool build/pathtool build/runtool
+build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool
 
 build/domain.c: domain/domain.lang gen/embed.c
 	mkdir -p build
@@ -55,6 +56,10 @@ build/sigmatool: $(SIGMA_TOOL) $(HEADERS)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/sigmatool $(SIGMA_TOOL)
 
+build/frosttool: $(FROST_TOOL) $(HEADERS)
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/frosttool $(FROST_TOOL)
+
 build/ballottool: $(BALLOT_TOOL) $(HEADERS)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/ballottool $(BALLOT_TOOL)
@@ -82,13 +87,14 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(THRESHOLD_TOOL)
 	$(CC) $(CLANG_FLAGS) $(DKG_TOOL)
 	$(CC) $(CLANG_FLAGS) $(SIGMA_TOOL)
+	$(CC) $(CLANG_FLAGS) $(FROST_TOOL)
 	$(CC) $(CLANG_FLAGS) $(BALLOT_TOOL)
 	$(CC) $(CLANG_FLAGS) $(SECP_TOOL)
 	$(CC) $(CLANG_FLAGS) $(SHA_TOOL)
 	$(CC) $(CLANG_FLAGS) $(PATH_TOOL)
 	$(CC) $(CLANG_FLAGS) $(RUN_TOOL) build/domain.c
 
-check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/ballottool build/secptool build/shatool build/pathtool build/runtool check-clang
+check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool check-clang
 	sh test/gate.sh
 	sh test/run.sh
 	sh test/review.sh
@@ -98,6 +104,7 @@ check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thres
 	build/thresholdtool
 	build/dkgtool
 	build/sigmatool
+	build/frosttool
 	build/ballottool
 	build/secptool
 	build/shatool

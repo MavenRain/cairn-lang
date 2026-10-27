@@ -97,3 +97,5 @@ time-timestamp.lang
 time-time.lang
 time-clock.lang
 time-epoch.lang
+schnorr-type.lang
+append-swap.lang

@@ -1,0 +1,2 @@
+-- TYPE_MISMATCH (S7, Q-S7-6 (a)): schnorrOk takes five U256 words, not Nat.
+def wrong : Flag := schnorrOk 1 2u 3u 4u 5u

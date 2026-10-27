@@ -283,6 +283,19 @@ def polityIsSet : isSet Polity :=
     (isSetProd Nat (Prod Nat (Prod Nat (Prod Point Point))) natIsSet
       (isSetProd Nat (Prod Nat (Prod Point Point)) natIsSet
         (isSetProd Nat (Prod Point Point) natIsSet (isSetProd Point Point u256IsSet u256IsSet))))
+-- The append check (S7, Q-S7-1, Q-S7-2 and Q-S7-6 (a)). An Auth is a
+-- threshold Schnorr signature (R.x, z) of the keyAppend committee on the
+-- message (head r, e). The host signs with FROST (src/front/frost.c), and
+-- a share is never a guest value. authOk checks the signature with the
+-- kernel builtin schnorrOk. append puts e at the end of r only when the
+-- check holds, else it gives none.
+family Auth := authOf (authR : U256) (authZ : U256)
+def authOk : Polity -> Auth -> Entry -> Record -> Verdict :=
+  fun (s : Polity) (a : Auth) (e : Entry) (r : Record) =>
+    elim (fun (u : Auth) => Flag)
+      (fun (rx : U256) (z : U256) => schnorrOk (keyAppend s) rx z (head r) e) a
+def append : Polity -> Auth -> Entry -> Record -> Option Record :=
+  fun (s : Polity) (a : Auth) (e : Entry) (r : Record) => flagIf (authOk s a e r) (some (snoc e r)) none
 def Proposal : Type 0 := Polity
 def Bit : Enc Verdict -> Type 0 :=
   fun (c : Enc Verdict) => Sigma (v : Verdict) (Path (Enc Verdict) (encEta Verdict v) c)

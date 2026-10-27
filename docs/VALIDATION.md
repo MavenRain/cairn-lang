@@ -31,6 +31,17 @@ its fixed kernel type, independently of the domain definition named
 `verifyAt` use them (`domain/domain.lang`), directly or through
 `isSetFun`.
 
+## Signature verification
+
+`schnorrOk` is a computed `VIS_INTERNAL` kernel builtin
+(`OP_SCHNORR_OK`). `rule_fixed` in `src/front/check.c` checks its argument
+types, and `schnorr_ok` in `src/front/eval.c` computes the result when all
+five arguments are closed `U256` words. Open arguments keep it stuck.
+
+| Builtin | Type | Since | Check |
+|---|---|---|---|
+| `schnorrOk` | `U256 -> U256 -> U256 -> U256 -> U256 -> Flag` | S7, Q-S7-6 (a), Q-S7-8 (a) | The arguments are the key, R.x, z, head r and e. The C check is the secp256k1 x-only Schnorr check of Q-S7-2 (a): it gives 1 when z G = R + c P, else 0. The unforgeability of the threshold Schnorr signature is V1 to V4 (PLAN section 5). |
+
 ## Assumptions
 
 Each row is a computational assumption that no path can prove. V1 to V4
@@ -51,3 +62,7 @@ The caller must authenticate dealer identities, reliably broadcast the same
 commitments to all members, and deliver the private shares over authenticated
 confidential channels, as in the [FROST DKG protocol](https://github.com/ZcashFoundation/frost/blob/main/book/src/tutorial/dkg.md).
 Quorum resharing instead uses the old threshold and verification keys.
+
+The FROST signing of `src/front/frost.c` (S7) needs the same caller
+guarantees. The caller must authenticate the signers and send the same
+round 1 list of commitments to every signer (`src/front/dkg.h`).

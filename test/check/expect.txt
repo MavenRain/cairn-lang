@@ -192,3 +192,5 @@ time-clock.lang REFUSE_TIME
 time-epoch.lang REFUSE_TIME
 polity-l9-swapped.lang PATH_END
 polity-l8-nodecide.lang PATH_END
+schnorr-type.lang TYPE_MISMATCH
+append-swap.lang TYPE_MISMATCH

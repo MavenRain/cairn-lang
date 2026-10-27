@@ -21,7 +21,8 @@
    each dealer identifier to an authenticated sender, reliably broadcast
    the same commitments to every member, and deliver shares over
    authenticated confidential channels. The caller supplies these
-   communication guarantees. */
+   communication guarantees. The FROST signing of front/frost.h needs the
+   same guarantees for its signers and its round 1 list. */
 #ifndef LANG_FRONT_DKG_H
 #define LANG_FRONT_DKG_H
 

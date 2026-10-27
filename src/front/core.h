@@ -89,6 +89,7 @@ typedef enum {
   OP_ZK_DIGEST,
   OP_ZK_SIGN,
   OP_ZK_VERIFY,
+  OP_SCHNORR_OK,
   OP_ZK_BALLOT,  /* ZkBallot C: the private ballot carrier for choices C (S8 B2b) */
   OP_ZK_WITNESS, /* ZkWitness: the witness carrier; OP_WITNESS is the Sigma projection */
   OP_ZK_CAST,    /* zkCast M C m c: a canonical ballot, the arguments kept */

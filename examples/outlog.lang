@@ -1,0 +1,11 @@
+-- The host append (S7, O20): `langc run` puts each emit value of an entry in
+-- its record. It prints the digest of each entry and, at the end, the head of
+-- the record (the hash chain of the domain record). An event is not an entry.
+state State := makeState (notes : Nat)
+def init : State := makeState 0
+
+-- Entry: emit two values, the tag 1 with the amount and the tag 2 with no
+-- fields.
+def note : (env : Env) -> (s : State) -> (amount : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (amount : U256) =>
+    some (pair (makeState (natAdd (notes s) 1)) (cons (emit 1 (cons amount nil)) (cons (emit 2 nil) nil)))

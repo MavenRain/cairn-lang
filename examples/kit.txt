@@ -34,3 +34,5 @@ threshold.lang
 onehot.lang
 ballot.lang
 daokit.lang
+append.lang
+outlog.lang

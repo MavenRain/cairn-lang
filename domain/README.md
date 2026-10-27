@@ -49,7 +49,7 @@ of each section gives its rule or ruling.
 | Sizes and streams | `Size`, the cofamily `Stream` with `sExtend` and `sDuplicate`, the parity quotient `Parity` with `sizeFlip` and `sizeEven` |
 | The empty family and the bag | `Empty`, `Bag` (the free commutative monoid) |
 | The free monoid | `FreeMon`, `fmCons`, `fmIsSet`, `fmFold`, `fmBind`, `fmMap`, `OpPos`, `endoThen`, `fmChain`, `fmRun`, `len` |
-| Part R, the record | `Digest`, `Entry`, `Record`, `snoc`, `tagGenesis`, `tagAppend`, `H3`, `chainFrom`, `head`, `opSucc`, `Verdict`, `verdictYes`, `foundAt`, `verify`, `prefix`, `Inclusion`, `recTake`, `recDrop`, `inclusion`, `verifyAt` |
+| Part R, the record | `Digest`, `Entry`, `Record`, `snoc`, `tagGenesis`, `tagAppend`, `H3`, `chainFrom`, `head`, `opSucc`, `Verdict`, `verdictYes`, `foundAt`, `verify`, `prefix`, `Inclusion`, `recTake`, `recDrop`, `inclusion`, `verifyAt`, `Auth`, `authOf`, `authR`, `authZ`, `authOk`, `append` |
 | The encrypted values | the sealed family `Enc`, `encBind`, `encMap`, `encOp2`, the law defs `decrypt` and `observe` |
 | Quorum and proofs | `Quorum`, the law def `open`, `ZKProof`, the sealed family `Transcript`, the law def `verified` |
 | Part D, the DAO | `Point`, `Count`, `verdictNo`, `isSetProd`, `encEtaOf`, `encIsSet`, `Polity`, `makePolity`, `members`, `tAppend`, `tAmend`, `tOpen`, `keyOpen`, `keyAppend`, `polityIsSet`, `Proposal`, `Bit`, `SealedBallot`, `mkBallot`, `ballotVote`, `linkTag`, `Box`, `tagUsed`, `castBallot`, `tallyBox`, `countVotes`, `Decided`, `decideYes`, `enact`, `stepD`, `amendAll` |
@@ -72,6 +72,9 @@ of each section gives its rule or ruling.
 - `examples/record.lang` uses Part R in a guest program. It holds the
   laws L1 to L5 and the defs of the record rows in
   `test/eval/expect.txt`.
+- `examples/append.lang` holds the laws L10 and L11 (a good and a bad
+  Auth under `keyAppend`), and `examples/outlog.lang` is the run row of
+  the host append (O20).
 
 ## How to change the domain
 

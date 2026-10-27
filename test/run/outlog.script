@@ -1,0 +1,2 @@
+-- A call script for examples/outlog.lang (S7, O20): two emit values give two record entries and a head.
+0x00000000000000000000000000000000000000bb note 5u

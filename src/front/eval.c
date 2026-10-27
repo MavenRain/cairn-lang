@@ -2,6 +2,7 @@
    front/core.h). SHARED by the tcc kits. */
 #include "front/core.h"
 #include "front/blsag.h"
+#include "front/frost.h"
 #include "front/group.h"
 #include "sha256.h"
 
@@ -32,7 +33,7 @@ static const char *const OP_NAMES[] = {
   [OP_ADDR_EQ] = "addrEq", [OP_PROJ] = "?", [OP_KMAP] = "Map", [OP_KMAP_OF] = "mapOf",
   [OP_KMAP_GET] = "mapGet", [OP_KMAP_SET] = "mapSet",
   [OP_ZK_HP] = "zkHp", [OP_ZK_KEY] = "zkKey", [OP_ZK_DIGEST] = "zkDigest",
-  [OP_ZK_SIGN] = "zkSign", [OP_ZK_VERIFY] = "zkVerify",
+  [OP_ZK_SIGN] = "zkSign", [OP_ZK_VERIFY] = "zkVerify", [OP_SCHNORR_OK] = "schnorrOk",
   [OP_ZK_BALLOT] = "ZkBallot", [OP_ZK_WITNESS] = "ZkWitness", [OP_ZK_CAST] = "zkCast",
   [OP_ZK_PROVE] = "zkProve", [OP_ZK_PROJECT] = "zkProject", [OP_ZK_CHECK] = "zkCheck",
   [OP_NAT_IS_SET] = "natIsSet", [OP_U256_IS_SET] = "u256IsSet", [OP_FLAG_IS_SET] = "flagIsSet",
@@ -60,7 +61,7 @@ static const unsigned char OP_ARITY[] = {
   [OP_NAT_DIV] = 2, [OP_NAT_MOD] = 2, [OP_HASH] = 2,
   [OP_EC_ADD] = 2, [OP_EC_MUL] = 2, [OP_ADDR_TO_U256] = 1,
   [OP_PROJ] = 1, [OP_KMAP] = 2, [OP_KMAP_OF] = VARIES, [OP_KMAP_GET] = 3, [OP_KMAP_SET] = 4,
-  [OP_ZK_HP] = 1, [OP_ZK_KEY] = 1, [OP_ZK_DIGEST] = 1, [OP_ZK_SIGN] = 4, [OP_ZK_VERIFY] = 4,
+  [OP_ZK_HP] = 1, [OP_ZK_KEY] = 1, [OP_ZK_DIGEST] = 1, [OP_ZK_SIGN] = 4, [OP_ZK_VERIFY] = 4, [OP_SCHNORR_OK] = 5,
   [OP_ZK_BALLOT] = 1, [OP_ZK_WITNESS] = 0, [OP_ZK_CAST] = 4, [OP_ZK_PROVE] = 1, [OP_ZK_PROJECT] = 2, [OP_ZK_CHECK] = 4,
   [OP_NAT_IS_SET] = 0, [OP_U256_IS_SET] = 0, [OP_FLAG_IS_SET] = 0,
   [OP_INTERVAL] = 0, [OP_TRANSP] = 3,
@@ -1378,6 +1379,20 @@ static const Value *addr_to_u256(Machine *m, const Value *const *a, uint32_t n) 
   return word_value(m, a[0]->word);
 }
 
+/* schnorrOk key rx z head e (S7 B3, Q-S7-6 (a)): the check of the signature
+   (rx, z) of the message (head, e) under the x-only key in the host
+   (schnorr_verify, front/frost.h). AUTH_OK gives flagYes; every other result
+   gives flagNo. An open argument keeps the application stuck (word_args). */
+static const Value *schnorr_ok(Machine *m, const Value *const *a, uint32_t n) {
+  const Value *out;
+  AuthSig sig;
+  if (!word_args(m, OP_SCHNORR_OK, VAL_WORD, a, n, &out))
+    return out;
+  sig.rx = *a[1]->word;
+  sig.z = *a[2]->word;
+  return flag(m, schnorr_verify(a[0]->word, &sig, a[3]->word, a[4]->word) == AUTH_OK);
+}
+
 /* An open curve or zk op: a trap argument gives the trap; else the
    application is stuck. */
 static const Value *opaque(Machine *m, Op op, const Value *const *a, uint32_t n) {
@@ -2569,6 +2584,7 @@ static const Value *transp_data(Machine *m, const Value *head, const Value *line
   case OP_ZK_DIGEST:
   case OP_ZK_SIGN:
   case OP_ZK_VERIFY:
+  case OP_SCHNORR_OK:
   case OP_ZK_CAST:
   case OP_ZK_PROVE:
   case OP_ZK_PROJECT:
@@ -3566,6 +3582,8 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
     return zk_sign(m, a, n);
   case OP_ZK_VERIFY:
     return zk_verify(m, a, n);
+  case OP_SCHNORR_OK:
+    return schnorr_ok(m, a, n);
   case OP_ZK_CAST:
     return zk_cast(m, a, n);
   case OP_ZK_PROVE:

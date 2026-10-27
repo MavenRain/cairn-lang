@@ -1,0 +1,7 @@
+-- L10 (S7) with the snoc arguments swapped: snoc takes the entry first.
+def kA : Point := 0x987fb549d982c26644ae1a92fbdf96fd1c767cc63a42014959ccdb676f405889u
+def kO : Point := 0xf7f36a2ad3963a54863980b0ddf4c0cab710f2f1d88e3102eca3ec0429bc67e7u
+def pol : Polity := makePolity (fmUnit Point) 2 2 2 kO kA
+def r0 : Record := fmUnit Entry
+def goodA : Auth := authOf 0x63c55ee48262d59010d57436eb0b08a2ebfbdb4260c79782b14ce492739d695au 0xb5b183ab4ae8de8398af4513f5e2547ed261b7cc140b3379f9923c8fba54a82eu
+def l10 : Path (Option Record) (append pol goodA 42u r0) (some (snoc r0 42u)) := refl
