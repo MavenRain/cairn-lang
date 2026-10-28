@@ -6,7 +6,7 @@
 
 enum { SHA256_BLOCK = 64, SHA256_ROUNDS = 64 };
 
-static const uint32_t round_constant[SHA256_ROUNDS] = {
+const uint32_t sha256_round_constant[SHA256_ROUNDS] = {
   0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu, 0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u,
   0xd807aa98u, 0x12835b01u, 0x243185beu, 0x550c7dc3u, 0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u, 0xc19bf174u,
   0xe49b69c1u, 0xefbe4786u, 0x0fc19dc6u, 0x240ca1ccu, 0x2de92c6fu, 0x4a7484aau, 0x5cb0a9dcu, 0x76f988dau,
@@ -17,7 +17,7 @@ static const uint32_t round_constant[SHA256_ROUNDS] = {
   0x748f82eeu, 0x78a5636fu, 0x84c87814u, 0x8cc70208u, 0x90befffau, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u
 };
 
-static const uint32_t initial_hash[8] = {
+const uint32_t sha256_initial_hash[8] = {
   0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au,
   0x510e527fu, 0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u
 };
@@ -45,7 +45,7 @@ static void compress(uint32_t state[8], const unsigned char *block) {
     uint32_t e = v[4];
     uint32_t ch = (e & v[5]) ^ (~e & v[6]);
     uint32_t maj = (a & v[1]) ^ (a & v[2]) ^ (v[1] & v[2]);
-    uint32_t t1 = v[7] + (rotate(e, 6) ^ rotate(e, 11) ^ rotate(e, 25)) + ch + round_constant[t] + w[t];
+    uint32_t t1 = v[7] + (rotate(e, 6) ^ rotate(e, 11) ^ rotate(e, 25)) + ch + sha256_round_constant[t] + w[t];
     uint32_t t2 = (rotate(a, 2) ^ rotate(a, 13) ^ rotate(a, 22)) + maj;
     v[7] = v[6];
     v[6] = v[5];
@@ -67,7 +67,7 @@ void sha256(const unsigned char *data, size_t size, unsigned char digest[32]) {
   size_t done = 0;
   size_t rest;
   for (unsigned i = 0; i < 8; i++)
-    state[i] = initial_hash[i];
+    state[i] = sha256_initial_hash[i];
   for (; size - done >= SHA256_BLOCK; done += SHA256_BLOCK)
     compress(state, data + done);
   /* The pad (section 5.1.1): 0x80, zero bytes, then the 64-bit length in

@@ -1,0 +1,4 @@
+-- A transp along a path of types known only at run time (tyP n) does not
+-- reduce at compile time: `langc --kit build` refuses it with REFUSE_LOWER.
+def tyP : Nat -> Path (Type 0) Nat Nat := fun n => flagIf (natEq n 0) refl refl
+def moved : (n : Nat) -> Nat := fun (n : Nat) => transp (fun (i : I) => tyP n @ i) i0 n

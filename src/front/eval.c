@@ -704,9 +704,9 @@ const Value *path_apply(Machine *m, const Value *p, const Value *r, const Value 
   if (scrut_of(p) != SCRUT_NEUTRAL)
     return internal(m, "a path application of a value that is not a path");
   /* The end point rule: a neutral path at i0 or i1 is its end. */
-  if (ival_is_end(r, 0) && a != NULL)
+  if (ival_is_end(r, 0) && a != NULL && !m->keep_ends)
     return a;
-  if (ival_is_end(r, 1) && b != NULL)
+  if (ival_is_end(r, 1) && b != NULL && !m->keep_ends)
     return b;
   ends = arena_alloc(m->arena, 2u * sizeof *ends);
   v = new_value(m, VAL_PAPP);
@@ -1412,11 +1412,18 @@ static int closed_point(const Value *v) {
    host on secp256k1 (front/group.h, slice S4). A coordinate at or above p or
    a point not on the curve traps like an overflow (R14, R18). An open
    argument keeps the application stuck (opaque). */
+static const Value *point_trap(const Value *v);
+
 static const Value *ec_op(Machine *m, Op op, const Value *const *a, uint32_t n) {
   GroupPoint p;
   GroupPoint q;
   U256 x;
   U256 y;
+  const Value *trap = point_trap(a[0]);
+  if (trap == NULL)
+    trap = op == OP_EC_ADD ? point_trap(a[1]) : a[1]->kind == VAL_TRAP ? a[1] : NULL;
+  if (trap != NULL)
+    return trap;
   if (!closed_point(a[0]) || (op == OP_EC_ADD ? !closed_point(a[1]) : a[1]->kind != VAL_WORD))
     return opaque(m, op, a, n);
   if (!group_from_words(&p, a[0]->args[0]->word, a[0]->args[1]->word))

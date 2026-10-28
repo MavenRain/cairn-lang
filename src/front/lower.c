@@ -432,11 +432,50 @@ static const char *op_word(IrOp op) {
     return "mul_carry";
   case IR_OP_OR:
     return "or";
+  case IR_OP_LT:
+    return "lt";
+  case IR_OP_DIV:
+    return "div";
+  case IR_OP_MOD:
+    return "mod";
+  }
+  return "?";
+}
+
+static const char *call_word(IrCall call) {
+  switch (call) {
+  case IR_CALL_U256_ADD:
+    return "u256_add";
+  case IR_CALL_U256_SUB:
+    return "u256_sub";
+  case IR_CALL_U256_LE:
+    return "u256_le";
+  case IR_CALL_U256_EQ:
+    return "u256_eq";
+  case IR_CALL_TO_U256:
+    return "to_u256";
+  case IR_CALL_SHA256:
+    return "sha256";
+  case IR_CALL_FE_ADD:
+    return "fe_add";
+  case IR_CALL_FE_SUB:
+    return "fe_sub";
+  case IR_CALL_FE_MUL:
+    return "fe_mul";
+  case IR_CALL_FE_INV:
+    return "fe_inv";
+  case IR_CALL_EC_ADD:
+    return "ec_add";
+  case IR_CALL_EC_MUL:
+    return "ec_mul";
+  case IR_CALL_SCHNORR_OK:
+    return "schnorr_ok";
   }
   return "?";
 }
 
 static void expr_print(const IrExpr *e, FILE *out, unsigned depth) {
+  size_t i;
   if (depth > IR_PRINT_DEPTH_MAX) {
     fputs("...", out);
     return;
@@ -459,6 +498,14 @@ static void expr_print(const IrExpr *e, FILE *out, unsigned depth) {
     fputs("load(", out);
     expr_print(e->left, out, depth + 1u);
     fprintf(out, ", %u)", (unsigned)e->field);
+    return;
+  case IR_EXPR_CALL:
+    fprintf(out, "call %s(", call_word(e->call));
+    for (i = 0; i < e->arg_count; i++) {
+      fputs(i == 0 ? "" : ", ", out);
+      expr_print(e->args[i], out, depth + 1u);
+    }
+    fputs(")", out);
     return;
   }
 }
@@ -553,6 +600,8 @@ static const char *scalar_word(IrScalar s) {
     return "nat";
   case IR_SCALAR_FLAG:
     return "flag";
+  case IR_SCALAR_U256:
+    return "u256";
   }
   return "?";
 }
@@ -616,11 +665,81 @@ static int ctor_full(Low *l, Buf *b, const Value *v, uint32_t skip, uint32_t n, 
   return v->argc < skip + n ? closure(l) : ctor_block(l, b, tag, v->args + skip, n, out);
 }
 
+/* The number of recursive fields of C. */
+static uint32_t rec_count(const CtorInfo *c) {
+  uint32_t n = 0;
+  uint32_t k;
+  for (k = 0; k < c->field_count; k++)
+    n += c->fields[k].recursive ? 1u : 0u;
+  return n;
+}
+
+/* 1 when X is a point constructor value without a recursive field (a
+   leaf, as fmEta and fmUnit). */
+static int static_leaf(const Low *l, const Value *x) {
+  return x != NULL && (x->kind == VAL_OP || x->kind == VAL_STUCK) && x->op == OP_CTOR && l->m->ctors[x->inst].interval_count == 0u &&
+         rec_count(&l->m->ctors[x->inst]) == 0u;
+}
+
+/* A binary node (cairn-lang S8, Q-S8-6, Q-S8-10): a point constructor with
+   the 2 recursive fields L < R lowers when one side is a static leaf. A
+   static leaf at L gives the constructor tag (the walk goes to R); a static
+   leaf at R gives the pseudo tag ctor_count (the walk goes to L). Else the
+   value is a tree at run time. */
 static int lower_ctor(Low *l, Buf *b, const Value *v, Operand *out) {
   const CtorInfo *c = &l->m->ctors[v->inst];
   const FamilyInfo *fam = &l->m->families[c->family];
-  return ctor_full(l, b, v, fam->param_count, c->field_count, v->inst - fam->first_ctor, out);
+  const Value *const *f = v->args + fam->param_count;
+  uint32_t side[2] = {0u, 0u};
+  uint32_t n = 0;
+  uint32_t k;
+  if (c->interval_count != 0u || rec_count(c) != 2u || v->argc < fam->param_count + c->field_count)
+    return ctor_full(l, b, v, fam->param_count, c->field_count, v->inst - fam->first_ctor, out);
+  for (k = 0; k < c->field_count; k++)
+    if (c->fields[k].recursive)
+      side[n++] = k;
+  return static_leaf(l, f[side[0]])   ? ctor_block(l, b, v->inst - fam->first_ctor, f, c->field_count, out)
+         : static_leaf(l, f[side[1]]) ? ctor_block(l, b, fam->ctor_count, f, c->field_count, out)
+                                      : diag_fail(l->m->diag, "REFUSE_RUNTIME_TREE", l->m->def,
+                                                  "a run-time %s without a static leaf side is a tree of %s (HOST-LIMIT)", c->name, fam->name);
 }
+
+/* An operation with no form on the target (cairn-lang S8, Q-S8-1, Q-S8-5). */
+static int refuse(Low *l, const char *what) {
+  return diag_fail(l->m->diag, "REFUSE_LOWER", l->m->def, "%s does not lower (HOST-LIMIT)", what);
+}
+
+/* The prelude function CALL applied to the N words of ARGS. */
+static const IrExpr *ex_call(Low *l, IrCall call, const IrExpr *const *args, size_t n) {
+  IrExpr *e = expr_alloc(l, IR_EXPR_CALL);
+  if (e == NULL)
+    return NULL;
+  e->call = call;
+  e->args = args;
+  e->arg_count = n;
+  return e;
+}
+
+/* The constant U256 (or Addr) X: a new block of its 4 limbs, the low limb
+   first (src/ir.h). */
+static int word_block(Low *l, Buf *b, const U256 *x, Operand *out) {
+  const IrExpr **fields = arena_alloc(l->m->arena, 4u * sizeof *fields);
+  IrStmt *s = stmt_new(l, IR_STMT_ALLOC);
+  uint32_t k;
+  if (fields == NULL)
+    return oom(l);
+  for (k = 0; k < 4u; k++)
+    fields[k] = ex_const(l, x->limb[k]);
+  if (s == NULL || fields[0] == NULL || fields[1] == NULL || fields[2] == NULL || fields[3] == NULL)
+    return 0;
+  s->local = local_new(l);
+  s->fields = fields;
+  s->field_count = 4u;
+  *out = operand(ex_local(l, s->local), ex_const(l, 0));
+  return out->w != NULL && out->f != NULL && emit(l, b, s);
+}
+
+static int lower_stuck(Low *l, Buf *b, const Value *v, Operand *out);
 
 /* A canonical value. An eliminator here has too few arguments, so it is a
    function. */
@@ -633,11 +752,17 @@ static int lower_canon(Low *l, Buf *b, const Value *v, Operand *out) {
   case OP_SUM:
   case OP_OPTION:
   case OP_LIST:
-  case OP_EQ:
   case OP_FAMILY:
   case OP_UNIT_VAL:
   case OP_FLAG_NO:
-  case OP_REFL:
+  case OP_U256:
+  case OP_ADDR:
+  case OP_INTERVAL:
+  case OP_SYSTEM:
+  case OP_FIN:
+  case OP_NAT_IS_SET:
+  case OP_U256_IS_SET:
+  case OP_FLAG_IS_SET:
     return give(l, out, 0, 0);
   case OP_FLAG_YES:
     return give(l, out, 1, 0);
@@ -670,18 +795,52 @@ static int lower_canon(Low *l, Buf *b, const Value *v, Operand *out) {
   case OP_FILTER:
   case OP_WITNESS:
   case OP_PAYLOAD:
-  case OP_SYMM:
-  case OP_TRANS:
-  case OP_TRANSPORT:
-  case OP_CONG:
+  case OP_ELIM:
   case OP_NAT_ADD:
   case OP_NAT_SUB:
-  case OP_NAT_MUL:
   case OP_NAT_EQ:
   case OP_NAT_LE:
   case OP_FLAG_IF:
+  case OP_U256_ADD:
+  case OP_U256_SUB:
+  case OP_U256_LE:
+  case OP_U256_EQ:
+  case OP_TO_U256:
+  case OP_ADDR_EQ:
+  case OP_NAT_DIV:
+  case OP_NAT_MOD:
+  case OP_HASH:
+  case OP_ADDR_TO_U256:
   case OP_PROJ:
+  case OP_FIN_ADD:
+  case OP_FIN_NEG:
+  case OP_FIN_CASE:
+  case OP_EC_ADD:
+  case OP_EC_MUL:
+  case OP_SCHNORR_OK:
     return closure(l);
+  /* No form on the target: the refusals of lower_stuck. */
+  case OP_TRANSP:
+  case OP_HCOMP:
+  case OP_GLUE:
+  case OP_GLUE_ELEM:
+  case OP_UNGLUE:
+  case OP_KMAP:
+  case OP_KMAP_OF:
+  case OP_KMAP_GET:
+  case OP_KMAP_SET:
+  case OP_ZK_HP:
+  case OP_ZK_KEY:
+  case OP_ZK_DIGEST:
+  case OP_ZK_SIGN:
+  case OP_ZK_VERIFY:
+  case OP_ZK_BALLOT:
+  case OP_ZK_WITNESS:
+  case OP_ZK_CAST:
+  case OP_ZK_PROVE:
+  case OP_ZK_PROJECT:
+  case OP_ZK_CHECK:
+    return lower_stuck(l, b, v, out);
   }
   return internal(l, "an unknown operation");
 }
@@ -776,6 +935,22 @@ typedef struct {
   uint32_t cont;
 } Walk;
 
+/* A fold into B -> B applied to B0 (cairn-lang S8, Q-S8-11): the fold V,
+   the recursive field REC of each of the N tags, the binary node BIN, the
+   tag NOW whose leaf goes on ACC during the walk and the tag LATER whose
+   leaf goes on ACC in the pass. */
+typedef struct {
+  const Value *v;
+  const uint32_t *rec;
+  uint32_t n;
+  uint32_t bin;
+  uint32_t now;
+  uint32_t later;
+  Slot acc;
+} Chain;
+
+static int leaf_at(Low *l, Buf *b, const IrExpr *addr, const Chain *ch, uint32_t i);
+
 static Walk walk_new(Low *l) {
   Walk w;
   w.rev = local_new(l);
@@ -809,8 +984,9 @@ static int walk_step(Low *l, Buf *b, const Walk *w, uint32_t k) {
 /* The spine walk of X. A node with tag I has the recursive field REC[I] (or
    NO_REC). A node with a recursive field goes on the chain. The walk stops
    at a node without one (CUR), or at a trapped field (END = 1). The cell of
-   the last node comes first. */
-static int walk(Low *l, Buf *b, Operand x, const uint32_t *rec, uint32_t n, Walk *w) {
+   the last node comes first. With CH (a fold into B -> B), the leaf of a
+   node with the tag NOW goes on ACC before the step. */
+static int walk_with(Low *l, Buf *b, Operand x, const uint32_t *rec, uint32_t n, const Chain *ch, Walk *w) {
   IrBlock *arms = arena_alloc(l->m->arena, ((size_t)n + 1u) * sizeof *arms);
   Buf body = buf_under(b);
   Buf arm;
@@ -820,7 +996,9 @@ static int walk(Low *l, Buf *b, Operand x, const uint32_t *rec, uint32_t n, Walk
     return oom(l);
   for (i = 0; i < n; i++) {
     arm = buf_under(&body);
-    if (!(rec[i] == NO_REC ? set(l, &arm, w->cont, ex_const(l, 0)) : walk_step(l, &arm, w, rec[i])))
+    if (!(rec[i] == NO_REC ? set(l, &arm, w->cont, ex_const(l, 0))
+                           : (ch == NULL || i != ch->now || leaf_at(l, &arm, ex_local(l, w->cur), ch, i)) &&
+                                 walk_step(l, &arm, w, rec[i])))
       return 0;
     arms[i] = block_of(&arm);
   }
@@ -828,6 +1006,10 @@ static int walk(Low *l, Buf *b, Operand x, const uint32_t *rec, uint32_t n, Walk
          set(l, b, w->cur, x.w) && set(l, b, w->cont, ex_bin(l, IR_OP_EQ, x.f, ex_const(l, 0))) &&
          st_switch(l, &body, ex_load(l, ex_local(l, w->cur), 0), arms, n) &&
          st_while(l, b, ex_const(l, SPINE_FUEL), w->cont, &body);
+}
+
+static int walk(Low *l, Buf *b, Operand x, const uint32_t *rec, uint32_t n, Walk *w) {
+  return walk_with(l, b, x, rec, n, NULL, w);
 }
 
 /* The start of a pass over the chain of W: NODE := word 1 of the cell. */
@@ -987,45 +1169,99 @@ static int unfold(Low *l, Buf *b, const Value *v, Operand *out) {
 }
 
 /* A fold step at the node ADDR of the constructor C: ACC := FN applied to
-   the fields, with ACC for the recursive field R. */
-static int fam_case(Low *l, Buf *b, const IrExpr *addr, const Value *fn, const CtorInfo *c, uint32_t r, Slot acc) {
-  Operand *args = arena_alloc(l->m->arena, ((size_t)c->field_count + 1u) * sizeof *args);
+   the fields, with ACC for the recursive field R. ELIM (cairn elim, eval.c
+   elim_family): the recursive field and then ACC, and a path field and then
+   its erased fold. */
+static int fam_case(Low *l, Buf *b, const IrExpr *addr, const Value *fn, const CtorInfo *c, uint32_t r, int elim, Slot acc) {
+  Operand *args = arena_alloc(l->m->arena, (2u * (size_t)c->field_count + 1u) * sizeof *args);
+  uint32_t n = 0;
   uint32_t k;
   if (args == NULL)
     return oom(l);
-  for (k = 0; k < c->field_count; k++)
-    if (k != r && !field_at(l, b, addr, k, &args[k]))
+  for (k = 0; k < c->field_count; k++) {
+    if ((k != r || elim) && !field_at(l, b, addr, k, &args[n]))
       return 0;
-  if (r < c->field_count)
-    args[r] = slot_get(l, acc);
-  return apply_into(l, b, fn, args, c->field_count, acc);
+    n += k != r || elim ? 1u : 0u;
+    if (k == r)
+      args[n++] = slot_get(l, acc);
+    if (elim && c->fields[k].path)
+      args[n++] = operand(ex_const(l, 0), ex_const(l, 0));
+  }
+  return apply_into(l, b, fn, args, n, acc);
 }
 
-/* SWITCH on the tag of the node at ADDR into ACC. When REC_ARMS is 1, the
+/* The index of the first binary node of FAM (a point constructor with 2
+   recursive fields), or NO_REC. */
+static uint32_t bin_of(const Low *l, const FamilyInfo *fam) {
+  const CtorInfo *c;
+  uint32_t i;
+  for (i = 0; i < fam->ctor_count; i++) {
+    c = &l->m->ctors[fam->first_ctor + i];
+    if (c->interval_count == 0u && rec_count(c) == 2u)
+      return i;
+  }
+  return NO_REC;
+}
+
+static int fam_switch(Low *l, Buf *b, const IrExpr *addr, const Value *v, const uint32_t *rec, uint32_t n, int rec_arms, Slot acc);
+
+/* A fold step at the binary node ADDR (constructor I of the fold V,
+   cairn-lang S8, Q-S8-6): ACC := the case of I applied to the fields, with
+   ACC for the recursive field R and, for the other recursive field (a
+   static leaf), its fold by the leaf arms of V. */
+static int bin_case(Low *l, Buf *b, const IrExpr *addr, const Value *v, const uint32_t *rec, uint32_t n, uint32_t i, uint32_t r, Slot acc) {
+  const FamilyInfo *fam = &l->m->families[v->inst];
+  const CtorInfo *c = &l->m->ctors[fam->first_ctor + i];
+  Operand *args = arena_alloc(l->m->arena, ((size_t)c->field_count + 1u) * sizeof *args);
+  Operand lf = operand(ex_const(l, 0), ex_const(l, 0));
+  uint32_t t = local_new(l);
+  Slot leaf = slot_new(l);
+  Buf in = buf_under(b);
+  uint32_t k;
+  if (args == NULL)
+    return oom(l);
+  for (k = 0; k < c->field_count; k++) {
+    if (k != r && !field_at(l, b, addr, k, &args[k]))
+      return 0;
+    lf = k != r && c->fields[k].recursive ? args[k] : lf;
+    args[k] = k == r ? slot_get(l, acc) : (c->fields[k].recursive ? slot_get(l, leaf) : args[k]);
+  }
+  return set(l, b, t, lf.w) && fam_switch(l, &in, ex_local(l, t), v, rec, n, 0, leaf) && guard(l, b, lf.f, leaf, &in) &&
+         apply_into(l, b, v->args[i], args, c->field_count, acc);
+}
+
+/* SWITCH on the tag of the node at ADDR into ACC, with N arms (arm
+   ctor_count is the pseudo tag of a binary node). When REC_ARMS is 1, the
    arms of the constructors with a recursive field apply their case (else
    the arms of the ones without). The other arms are not reached; they give
-   a trap. */
-static int fam_switch(Low *l, Buf *b, const IrExpr *addr, const Value *v, const uint32_t *rec, int rec_arms, Slot acc) {
+   a trap. A path constructor has no run-time value: its arm is a trap. */
+static int fam_switch(Low *l, Buf *b, const IrExpr *addr, const Value *v, const uint32_t *rec, uint32_t n, int rec_arms, Slot acc) {
   const FamilyInfo *fam = &l->m->families[v->inst];
-  IrBlock *arms = arena_alloc(l->m->arena, ((size_t)fam->ctor_count + 1u) * sizeof *arms);
+  IrBlock *arms = arena_alloc(l->m->arena, ((size_t)n + 1u) * sizeof *arms);
+  const CtorInfo *c;
   Buf arm;
+  uint32_t ci;
   uint32_t i;
   if (arms == NULL)
     return oom(l);
-  for (i = 0; i < fam->ctor_count; i++) {
+  for (i = 0; i < n; i++) {
     arm = buf_under(b);
-    if (!((rec[i] != NO_REC) == rec_arms ? fam_case(l, &arm, addr, v->args[i], &l->m->ctors[fam->first_ctor + i], rec[i], acc)
-                                         : store(l, &arm, acc, trap_value(l))))
+    ci = i < fam->ctor_count ? i : bin_of(l, fam);
+    c = &l->m->ctors[fam->first_ctor + ci];
+    if (!(c->interval_count == 0u && (rec[i] != NO_REC) == rec_arms
+              ? (rec_count(c) == 2u ? bin_case(l, &arm, addr, v, rec, n, ci, rec[i], acc)
+                                    : fam_case(l, &arm, addr, v->args[ci], c, rec[i], v->op == OP_ELIM, acc))
+              : store(l, &arm, acc, trap_value(l))))
       return 0;
     arms[i] = block_of(&arm);
   }
-  return st_switch(l, b, ex_load(l, addr, 0), arms, fam->ctor_count);
+  return st_switch(l, b, ex_load(l, addr, 0), arms, n);
 }
 
 /* A fold over a linear family: the walk, the base node into ACC, then a
-   pass from the last recursive node with ACC for its recursive field. */
-static int family_spine(Low *l, Buf *b, const Value *v, const uint32_t *rec, Operand *out) {
-  const FamilyInfo *fam = &l->m->families[v->inst];
+   pass from the last recursive node with ACC for its recursive field. N is
+   the arm count (the pseudo tag of a binary node adds 1). */
+static int family_spine(Low *l, Buf *b, const Value *v, const uint32_t *rec, uint32_t n, Operand *out) {
   const IrExpr *node;
   Operand x;
   Walk w;
@@ -1033,38 +1269,187 @@ static int family_spine(Low *l, Buf *b, const Value *v, const uint32_t *rec, Ope
   Buf in = buf_under(b);
   Buf body = buf_under(b);
   *out = slot_get(l, acc);
-  return lower(l, b, v->args[fam->ctor_count], &x) && walk(l, b, x, rec, fam->ctor_count, &w) &&
-         fam_switch(l, &in, ex_local(l, w.cur), v, rec, 0, acc) && guard(l, b, ex_local(l, w.end), acc, &in) &&
-         chain_node(l, &body, &w, &node) && fam_switch(l, &body, node, v, rec, 1, acc) && chain_end(l, b, &w, &body);
+  return lower(l, b, v->args[v->argc - 1u], &x) && walk(l, b, x, rec, n, &w) &&
+         fam_switch(l, &in, ex_local(l, w.cur), v, rec, n, 0, acc) && guard(l, b, ex_local(l, w.end), acc, &in) &&
+         chain_node(l, &body, &w, &node) && fam_switch(l, &body, node, v, rec, n, 1, acc) && chain_end(l, b, &w, &body);
 }
 
 /* A fold over a family without a recursive field is a case split. With at
-   most one recursive field in each constructor, it is a spine walk. */
+   most one recursive field in each point constructor, it is a spine walk.
+   One binary node (cairn-lang S8, Q-S8-6) walks too: a static leaf side
+   (lower_ctor) gives the constructor tag (REC = R) or the pseudo tag
+   ctor_count (REC = L). A path constructor stops the walk. ELIM over a
+   binary node refuses. */
 static int family_fold(Low *l, Buf *b, const Value *v, Operand *out) {
   const FamilyInfo *fam = &l->m->families[v->inst];
   uint32_t *fields = arena_alloc(l->m->arena, ((size_t)fam->ctor_count + 1u) * sizeof *fields);
   uint32_t *recs = arena_alloc(l->m->arena, ((size_t)fam->ctor_count + 1u) * sizeof *recs);
   const CtorInfo *c;
+  uint32_t bin = bin_of(l, fam);
   uint32_t rec = 0;
   uint32_t here;
   uint32_t i;
   uint32_t k;
   if (fields == NULL || recs == NULL)
     return oom(l);
+  recs[fam->ctor_count] = NO_REC;
   for (i = 0; i < fam->ctor_count; i++) {
     c = &l->m->ctors[fam->first_ctor + i];
-    here = 0;
+    here = rec_count(c);
     recs[i] = NO_REC;
     for (k = 0; k < c->field_count; k++) {
-      here += c->fields[k].recursive ? 1u : 0u;
+      recs[fam->ctor_count] = i == bin && c->fields[k].recursive && recs[i] == NO_REC ? k : recs[fam->ctor_count];
       recs[i] = c->fields[k].recursive ? k : recs[i];
     }
-    if (here > 1u)
+    recs[i] = c->interval_count != 0u ? NO_REC : recs[i];
+    if (c->interval_count == 0u && here > (i == bin && v->op != OP_ELIM ? 2u : 1u))
       return diag_fail(l->m->diag, "REFUSE_RUNTIME_TREE", l->m->def, "a fold over a tree of %s must exist at run time (HOST-LIMIT)", fam->name);
     rec += here;
     fields[i] = c->field_count;
   }
-  return rec != 0 ? family_spine(l, b, v, recs, out) : cases_of(l, b, v->args[fam->ctor_count], v->args, fields, fam->ctor_count, out);
+  return rec != 0 ? family_spine(l, b, v, recs, bin != NO_REC ? fam->ctor_count + 1u : fam->ctor_count, out)
+                  : cases_of(l, b, v->args[v->argc - 1u], v->args, fields, fam->ctor_count, out);
+}
+
+/* ACC := the leaf case of the node at ADDR (a point constructor without a
+   recursive field) applied to its fields, then to ACC. The other arms are
+   not reached; they give a trap. */
+static int leaf_step(Low *l, Buf *b, const IrExpr *addr, const Chain *ch) {
+  const FamilyInfo *fam = &l->m->families[ch->v->inst];
+  IrBlock *arms = arena_alloc(l->m->arena, ((size_t)ch->n + 1u) * sizeof *arms);
+  const CtorInfo *c;
+  Operand *args;
+  Buf arm;
+  int live;
+  uint32_t i;
+  uint32_t k;
+  if (arms == NULL)
+    return oom(l);
+  for (i = 0; i < ch->n; i++) {
+    arm = buf_under(b);
+    c = &l->m->ctors[fam->first_ctor + (i < fam->ctor_count ? i : ch->bin)];
+    live = i < fam->ctor_count && c->interval_count == 0u && rec_count(c) == 0u;
+    args = arena_alloc(l->m->arena, ((size_t)c->field_count + 1u) * sizeof *args);
+    if (args == NULL)
+      return oom(l);
+    for (k = 0; live && k < c->field_count; k++)
+      if (!field_at(l, &arm, addr, k, &args[k]))
+        return 0;
+    args[c->field_count] = slot_get(l, ch->acc);
+    if (!(live ? apply_into(l, &arm, ch->v->args[i], args, c->field_count + 1u, ch->acc)
+               : store(l, &arm, ch->acc, trap_value(l))))
+      return 0;
+    arms[i] = block_of(&arm);
+  }
+  return st_switch(l, b, ex_load(l, addr, 0), arms, ch->n);
+}
+
+/* ACC := the leaf side of the binary node at ADDR (tag I) applied to ACC:
+   the field L for the constructor tag, the field R for the pseudo tag. */
+static int leaf_at(Low *l, Buf *b, const IrExpr *addr, const Chain *ch, uint32_t i) {
+  const FamilyInfo *fam = &l->m->families[ch->v->inst];
+  uint32_t k = ch->rec[i] == ch->rec[fam->ctor_count] ? ch->rec[ch->bin] : ch->rec[fam->ctor_count];
+  uint32_t t = local_new(l);
+  Operand lf;
+  Buf in = buf_under(b);
+  return field_at(l, b, addr, k, &lf) && set(l, b, t, lf.w) && leaf_step(l, &in, ex_local(l, t), ch) &&
+         guard(l, b, lf.f, ch->acc, &in);
+}
+
+/* A pass step at NODE: the leaf of a node with the tag LATER goes on ACC;
+   the other arms are empty. */
+static int chain_pass(Low *l, Buf *b, const IrExpr *node, const Chain *ch) {
+  IrBlock *arms = arena_alloc(l->m->arena, ((size_t)ch->n + 1u) * sizeof *arms);
+  Buf arm;
+  uint32_t i;
+  if (arms == NULL)
+    return oom(l);
+  for (i = 0; i < ch->n; i++) {
+    arm = buf_under(b);
+    if (i == ch->later && !leaf_at(l, &arm, node, ch, i))
+      return 0;
+    arms[i] = block_of(&arm);
+  }
+  return st_switch(l, b, ex_load(l, node, 0), arms, ch->n);
+}
+
+/* 1 when X is the variable Y. */
+static int var_is(const Value *x, const Value *y) {
+  return x != NULL && x->kind == VAL_VAR && x->nat == y->nat;
+}
+
+/* 1 when X is the application F (G D) of three variables. */
+static int app2(const Value *x, const Value *f, const Value *g, const Value *d) {
+  return x != NULL && x->kind == VAL_APP && var_is(x->dom, f) && x->arg != NULL && x->arg->kind == VAL_APP &&
+         var_is(x->arg->dom, g) && var_is(x->arg->arg, d);
+}
+
+/* A fold over a family with one binary node into B -> B, applied to B0
+   (cairn-lang S8, Q-S8-11): a loop on B. The binary case on new variables
+   G, H, then D must be H (G D) (fmChain: the left side first) or G (H D)
+   (fmRun: the right side first); else REFUSE_RUNTIME_CLOSURE, as for any
+   other application. ACC := B0, then each leaf case on ACC: the leaves
+   that go first during the walk (outer node first), the base node, then
+   the others in the pass from the innermost node. */
+static int chain_fold(Low *l, Buf *b, const Value *app, Operand *out) {
+  const Value *v = app->dom;
+  const FamilyInfo *fam;
+  const CtorInfo *c;
+  const Value *g;
+  const Value *h;
+  const Value *d;
+  const Value *x;
+  const IrExpr *node;
+  uint32_t *recs;
+  Chain ch;
+  Operand t;
+  Walk w;
+  Buf in = buf_under(b);
+  Buf body = buf_under(b);
+  uint32_t i;
+  uint32_t k;
+  if (v == NULL || v->kind != VAL_STUCK || v->op != OP_FOLD_FAMILY)
+    return closure(l);
+  fam = &l->m->families[v->inst];
+  ch.bin = bin_of(l, fam);
+  if (ch.bin == NO_REC)
+    return closure(l);
+  recs = arena_alloc(l->m->arena, ((size_t)fam->ctor_count + 1u) * sizeof *recs);
+  if (recs == NULL)
+    return oom(l);
+  for (i = 0; i < fam->ctor_count; i++) {
+    c = &l->m->ctors[fam->first_ctor + i];
+    recs[i] = NO_REC;
+    if (c->interval_count == 0u && i != ch.bin && rec_count(c) != 0u)
+      return closure(l);
+  }
+  c = &l->m->ctors[fam->first_ctor + ch.bin];
+  recs[fam->ctor_count] = NO_REC;
+  for (k = 0; k < c->field_count; k++) {
+    recs[fam->ctor_count] = c->fields[k].recursive && recs[fam->ctor_count] == NO_REC ? k : recs[fam->ctor_count];
+    recs[ch.bin] = c->fields[k].recursive ? k : recs[ch.bin];
+  }
+  g = fresh(l, operand(ex_const(l, 0), ex_const(l, 0)));
+  h = fresh(l, operand(ex_const(l, 0), ex_const(l, 0)));
+  d = fresh(l, operand(ex_const(l, 0), ex_const(l, 0)));
+  x = g == NULL || h == NULL || d == NULL ? NULL : apply_value(l->m, v->args[ch.bin], g);
+  x = x == NULL ? NULL : apply_value(l->m, x, h);
+  x = x == NULL ? NULL : apply_value(l->m, x, d);
+  if (!got(l, x))
+    return 0;
+  if (!app2(x, h, g, d) && !app2(x, g, h, d))
+    return closure(l);
+  ch.v = v;
+  ch.rec = recs;
+  ch.n = fam->ctor_count + 1u;
+  ch.now = app2(x, h, g, d) ? ch.bin : fam->ctor_count;
+  ch.later = app2(x, h, g, d) ? fam->ctor_count : ch.bin;
+  ch.acc = slot_new(l);
+  *out = slot_get(l, ch.acc);
+  return lower_into(l, b, app->arg, ch.acc) && lower(l, b, v->args[v->argc - 1u], &t) &&
+         walk_with(l, b, t, recs, ch.n, &ch, &w) && leaf_step(l, &in, ex_local(l, w.cur), &ch) &&
+         guard(l, b, ex_local(l, w.end), ch.acc, &in) && chain_node(l, &body, &w, &node) &&
+         chain_pass(l, &body, node, &ch) && chain_end(l, b, &w, &body);
 }
 
 /* The two arms of an option or a sum, behind the guard on the flag of X. */
@@ -1159,13 +1544,117 @@ static int proof_op(Low *l, Buf *b, const Value *v, uint32_t first, uint32_t cou
   return atoms(l, b, ex_const(l, 0), flag, out);
 }
 
-static int transport(Low *l, Buf *b, const Value *v, Operand *out) {
-  Operand proof;
+/* natDiv and natMod: a zero divisor sets the flag, and the word divides by
+   1 (src/ir.h). */
+static int nat_divmod(Low *l, Buf *b, const Value *v, IrOp op, Operand *out) {
+  Operand x;
+  Operand y;
+  const IrExpr *zero;
+  if (!lower(l, b, v->args[0], &x) || !lower(l, b, v->args[1], &y))
+    return 0;
+  zero = atom(l, b, ex_bin(l, IR_OP_EQ, y.w, ex_const(l, 0)));
+  return atoms(l, b, ex_bin(l, op, x.w, ex_bin(l, IR_OP_ADD, y.w, zero)), ex_or(l, zero, ex_or(l, x.f, y.f)), out);
+}
+
+/* CALL on the N arguments of V, behind the guard on their flags. ZERO: the
+   result 0 is a trap (a U256 overflow or curve error; never a heap block). */
+static int call_op(Low *l, Buf *b, const Value *v, IrCall call, uint32_t n, int zero, Operand *out) {
+  const IrExpr **args = arena_alloc(l->m->arena, ((size_t)n + 1u) * sizeof *args);
+  const IrExpr *f = ex_const(l, 0);
+  const IrExpr *w;
+  Operand x;
   Slot res = slot_new(l);
   Buf in = buf_under(b);
+  uint32_t i;
   *out = slot_get(l, res);
-  return lower(l, b, v->args[1], &proof) && lower_into(l, &in, v->args[2], res) &&
-         guard(l, b, proof.f, res, &in);
+  if (args == NULL)
+    return oom(l);
+  for (i = 0; i < n; i++) {
+    if (!lower(l, b, v->args[i], &x))
+      return 0;
+    args[i] = x.w;
+    f = ex_or(l, f, x.f);
+  }
+  w = atom(l, &in, ex_call(l, call, args, n));
+  return w != NULL && store(l, &in, res, operand(w, zero ? ex_bin(l, IR_OP_EQ, w, ex_const(l, 0)) : ex_const(l, 0))) &&
+         guard(l, b, f, res, &in);
+}
+
+/* finAdd n a b and finNeg n a as Nat operations on the index (Q-S8-1; eval.c
+   fin_add, fin_neg). Fin 0 has no value, so n = 0 sets the flag and the
+   modulus is 1. */
+static int fin_op(Low *l, Buf *b, const Value *v, int add, Operand *out) {
+  Operand n;
+  Operand x;
+  Operand y = {NULL, NULL};
+  const IrExpr *k;
+  const IrExpr *xm;
+  const IrExpr *ym;
+  const IrExpr *d;
+  const IrExpr *f;
+  if (!lower(l, b, v->args[0], &n) || !lower(l, b, v->args[1], &x) || (add && !lower(l, b, v->args[2], &y)))
+    return 0;
+  k = atom(l, b, ex_bin(l, IR_OP_ADD, n.w, ex_bin(l, IR_OP_EQ, n.w, ex_const(l, 0))));
+  f = ex_or(l, ex_or(l, n.f, x.f), ex_bin(l, IR_OP_EQ, n.w, ex_const(l, 0)));
+  xm = atom(l, b, ex_bin(l, IR_OP_MOD, x.w, k));
+  if (!add)
+    return atoms(l, b, ex_bin(l, IR_OP_MOD, ex_bin(l, IR_OP_SUB, n.w, xm), k), f, out);
+  ym = atom(l, b, ex_bin(l, IR_OP_MOD, y.w, k));
+  d = atom(l, b, ex_bin(l, IR_OP_SUB, n.w, ym));
+  return atoms(l, b,
+               ex_bin(l, IR_OP_ADD, ex_bin(l, IR_OP_SUB, xm, d), ex_bin(l, IR_OP_MUL, ex_bin(l, IR_OP_LT, xm, d), ex_bin(l, IR_OP_ADD, xm, ym))),
+               ex_or(l, f, y.f), out);
+}
+
+/* finAll at a run-time index k: a SWITCH on k, arm J the body J. */
+static int fin_switch(Low *l, Buf *b, const Value *v, Operand *out) {
+  IrBlock *arms = arena_alloc(l->m->arena, (size_t)v->argc * sizeof *arms);
+  Operand k;
+  Slot res = slot_new(l);
+  Buf in = buf_under(b);
+  Buf arm;
+  uint32_t j;
+  *out = slot_get(l, res);
+  if (arms == NULL)
+    return oom(l);
+  if (!lower(l, b, v->args[0], &k))
+    return 0;
+  for (j = 0; j + 1u < v->argc; j++) {
+    arm = buf_under(b);
+    if (!lower_into(l, &arm, v->args[j + 1u], res))
+      return 0;
+    arms[j] = block_of(&arm);
+  }
+  return st_switch(l, &in, k.w, arms, v->argc - 1u) && guard(l, b, k.f, res, &in);
+}
+
+/* elim P c1 .. cn x on a variable (eval.c reduce_elim): at Sum the two
+   cases, at Unit the one case, with no case a trap, and at a domain family
+   (FIELD = the family + 1) the family fold with the cases after P. */
+static int elim_of(Low *l, Buf *b, const Value *v, Operand *out) {
+  uint32_t fields[2] = {1u, 1u};
+  Value *w;
+  Operand x;
+  Slot res;
+  Buf in;
+  if (v->field != 0u) {
+    w = arena_alloc(l->m->arena, sizeof *w);
+    if (w == NULL)
+      return oom(l);
+    *w = *v;
+    w->inst = v->field - 1u;
+    w->args = v->args + 1;
+    w->argc = v->argc - 1u;
+    return family_fold(l, b, w, out);
+  }
+  if (v->inst == 2u)
+    return cases_of(l, b, v->args[3], v->args + 1, fields, 2, out);
+  if (v->inst != 1u)
+    return lower(l, b, v->args[v->argc - 1u], &x) && atoms(l, b, ex_const(l, 0), ex_const(l, 1), out);
+  res = slot_new(l);
+  in = buf_under(b);
+  *out = slot_get(l, res);
+  return lower(l, b, v->args[2], &x) && lower_into(l, &in, v->args[1], res) && guard(l, b, x.f, res, &in);
 }
 
 /* An eliminator on a variable. */
@@ -1178,7 +1667,6 @@ static int lower_stuck(Low *l, Buf *b, const Value *v, Operand *out) {
   case OP_SUM:
   case OP_OPTION:
   case OP_LIST:
-  case OP_EQ:
   case OP_FAMILY:
   case OP_UNIT_VAL:
   case OP_FLAG_YES:
@@ -1191,9 +1679,13 @@ static int lower_stuck(Low *l, Buf *b, const Value *v, Operand *out) {
   case OP_NIL:
   case OP_CONS:
   case OP_PACK:
-  case OP_REFL:
   case OP_CTOR:
   case OP_PURE:
+  case OP_U256:
+  case OP_ADDR:
+  case OP_INTERVAL:
+  case OP_SYSTEM:
+  case OP_FIN:
     return internal(l, "a stuck canonical value");
   case OP_FIRST:
   case OP_WITNESS:
@@ -1221,34 +1713,105 @@ static int lower_stuck(Low *l, Buf *b, const Value *v, Operand *out) {
     return unfold(l, b, v, out);
   case OP_FOLD_FAMILY:
     return family_fold(l, b, v, out);
-  case OP_SYMM:
-    return proof_op(l, b, v, 0, 1, out);
-  case OP_TRANS:
-    return proof_op(l, b, v, 0, 2, out);
-  case OP_CONG:
-    return proof_op(l, b, v, 1, 1, out);
-  case OP_TRANSPORT:
-    return transport(l, b, v, out);
+  case OP_ELIM:
+    return elim_of(l, b, v, out);
   case OP_NAT_ADD:
     return nat_bin(l, b, v, IR_OP_ADD, 1, out);
   case OP_NAT_SUB:
     return nat_bin(l, b, v, IR_OP_SUB, 0, out);
-  case OP_NAT_MUL:
-    return nat_bin(l, b, v, IR_OP_MUL, 1, out);
   case OP_NAT_EQ:
     return nat_bin(l, b, v, IR_OP_EQ, 0, out);
   case OP_NAT_LE:
     return nat_bin(l, b, v, IR_OP_LE, 0, out);
   case OP_FLAG_IF:
     return flag_if(l, b, v, out);
+  case OP_NAT_DIV:
+    return nat_divmod(l, b, v, IR_OP_DIV, out);
+  case OP_NAT_MOD:
+    return nat_divmod(l, b, v, IR_OP_MOD, out);
+  case OP_U256_ADD:
+    return call_op(l, b, v, IR_CALL_U256_ADD, 2, 1, out);
+  case OP_U256_SUB:
+    return call_op(l, b, v, IR_CALL_U256_SUB, 2, 0, out);
+  case OP_U256_LE:
+    return call_op(l, b, v, IR_CALL_U256_LE, 2, 0, out);
+  case OP_U256_EQ:
+  case OP_ADDR_EQ:
+    return call_op(l, b, v, IR_CALL_U256_EQ, 2, 0, out);
+  case OP_TO_U256:
+    return call_op(l, b, v, IR_CALL_TO_U256, 1, 0, out);
+  case OP_HASH:
+    return call_op(l, b, v, IR_CALL_SHA256, 2, 0, out);
+  case OP_ADDR_TO_U256:
+    return lower(l, b, v->args[0], out);
+  case OP_FIN_ADD:
+    return fin_op(l, b, v, 1, out);
+  case OP_FIN_NEG:
+    return fin_op(l, b, v, 0, out);
+  case OP_FIN_CASE:
+    return fin_switch(l, b, v, out);
+  case OP_NAT_IS_SET:
+  case OP_U256_IS_SET:
+  case OP_FLAG_IS_SET:
+    return proof_op(l, b, v, 0, v->argc, out);
+  case OP_EC_ADD:
+    return call_op(l, b, v, IR_CALL_EC_ADD, 2, 1, out);
+  case OP_EC_MUL:
+    return call_op(l, b, v, IR_CALL_EC_MUL, 2, 1, out);
+  case OP_SCHNORR_OK:
+    return call_op(l, b, v, IR_CALL_SCHNORR_OK, 5, 0, out);
+  case OP_TRANSP:
+    return refuse(l, "a transp that does not reduce at compile time");
+  case OP_HCOMP:
+    return refuse(l, "an hcomp that does not reduce at compile time");
+  case OP_GLUE:
+    return refuse(l, "a Glue type that does not reduce at compile time");
+  case OP_GLUE_ELEM:
+    return refuse(l, "a glue that does not reduce at compile time");
+  case OP_UNGLUE:
+    return refuse(l, "an unglue that does not reduce at compile time");
+  case OP_KMAP:
+  case OP_KMAP_OF:
+  case OP_KMAP_GET:
+  case OP_KMAP_SET:
+    return refuse(l, "a run-time map (KMap)");
+  case OP_ZK_HP:
+  case OP_ZK_KEY:
+  case OP_ZK_DIGEST:
+  case OP_ZK_SIGN:
+  case OP_ZK_VERIFY:
+  case OP_ZK_BALLOT:
+  case OP_ZK_WITNESS:
+  case OP_ZK_CAST:
+  case OP_ZK_PROVE:
+  case OP_ZK_PROJECT:
+  case OP_ZK_CHECK:
+    return refuse(l, "a host proof check (zk)");
   }
   return internal(l, "an unknown operation");
 }
 
 static int lower_value(Low *l, Buf *b, const Value *v, Operand *out) {
+  Operand p;
+  Operand e;
+  const Value *end;
   switch (v->kind) {
   case VAL_NAT:
     return give(l, out, v->nat, 0);
+  case VAL_WORD:
+    return word_block(l, b, v->word, out);
+  /* A path, a path type and an interval term erase (Q-S8-1). A path
+     application keeps the flag of the path. At a kept end (Q-S8-13) the
+     word is the end. */
+  case VAL_PLAM:
+  case VAL_PATHP:
+  case VAL_IVAL:
+    return give(l, out, 0, 0);
+  case VAL_PAPP:
+    end = v->argc != 2u ? NULL : ival_is_end(v->arg, 0) ? v->args[0] : ival_is_end(v->arg, 1) ? v->args[1] : NULL;
+    if (end != NULL)
+      return lower(l, b, v->dom, &p) && lower(l, b, end, &e) && atoms(l, b, e.w, ex_or(l, p.f, e.f), out);
+    return lower(l, b, v->dom, &p) && atoms(l, b, ex_const(l, 0), p.f, out);
   case VAL_TRAP:
     return give(l, out, 0, 1);
   case VAL_UNIV:
@@ -1256,8 +1819,10 @@ static int lower_value(Low *l, Buf *b, const Value *v, Operand *out) {
   case VAL_SIGMA:
     return give(l, out, 0, 0);
   case VAL_LAM:
-  case VAL_APP:
     return closure(l);
+  /* A fold into B -> B applied to B0 may be a loop (Q-S8-11). */
+  case VAL_APP:
+    return chain_fold(l, b, v, out);
   case VAL_VAR:
     if (v->nat >= l->level_count)
       return internal(l, "a variable without an operand");
@@ -1306,7 +1871,7 @@ static int lower_entry(Machine *m, uint32_t index, const Entry *e, IrFunc *fn) {
     return oom(&l);
   v = def_value(m, index);
   for (k = 0; k < e->param_count && v != NULL; k++) {
-    params[k] = e->param_flag[k] ? IR_SCALAR_FLAG : IR_SCALAR_NAT;
+    params[k] = e->param_flag[k] ? IR_SCALAR_FLAG : e->param_u256[k] ? IR_SCALAR_U256 : IR_SCALAR_NAT;
     x = fresh(&l, operand(ex_local(&l, k), ex_const(&l, 0)));
     v = x == NULL ? NULL : apply_value(m, v, x);
   }
@@ -1316,7 +1881,7 @@ static int lower_entry(Machine *m, uint32_t index, const Entry *e, IrFunc *fn) {
   fn->name = m->defs[index].name;
   fn->params = params;
   fn->param_count = e->param_count;
-  fn->result = e->result_flag ? IR_SCALAR_FLAG : IR_SCALAR_NAT;
+  fn->result = e->result_flag ? IR_SCALAR_FLAG : e->result_u256 ? IR_SCALAR_U256 : IR_SCALAR_NAT;
   fn->local_count = l.local_count;
   fn->body = block_of(&body);
   return 1;
@@ -1332,6 +1897,7 @@ int lower_program(Machine *m, IrProgram *prog) {
   prog->func_count = 0;
   if (funcs == NULL)
     return diag_fail(m->diag, "OOM", m->def, "out of memory");
+  m->keep_ends = 1;
   for (i = 0; i < m->def_count; i++) {
     m->fuel = EVAL_FUEL_STEPS;
     entry = m->defs[i].origin == ORIGIN_PROGRAM && entry_of(m, m->defs[i].type, &e);
@@ -1339,6 +1905,7 @@ int lower_program(Machine *m, IrProgram *prog) {
       return 0;
     n += entry ? 1u : 0u;
   }
+  m->keep_ends = 0;
   prog->func_count = n;
   return 1;
 }

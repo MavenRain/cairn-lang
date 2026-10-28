@@ -28,7 +28,12 @@ the domain, the kernel checks laws L6 to L9 as paths in
 signature under `keyAppend` that the builtin `schnorrOk` checks
 (`src/front/frost.c`), the kernel checks laws L10 and L11 as paths in
 `examples/append.lang`, and `langc run` appends each `Out` entry to the
-record (O18 and O20). Next: S8 (Wasm).
+record (O18 and O20). S8 DONE: `src/front/lower.c` lowers the ported
+core to the IR, `src/wasm.c` writes a Wasm module with a SHA-256 and
+secp256k1 prelude, a run-time fold over a linear `FreeMon` spine lowers
+(O8), and the C tool `test/wasmtool.c` runs each module on the wasmtime C
+API against `langc eval` (sections 6.2 and 9). Next: S9 (ES module +
+JSON).
 
 ## 1. Rulings
 
@@ -308,8 +313,9 @@ entries, and S8 must give a lowering for `FreeMon Entry` folds that are
 linear (O8).
 
 Differential tests: each target prelude runs the same vectors as the C
-reference in the front end (`langc eval`). The kit already uses node for
-`test/run-wasm.mjs`. That harness stays. No new node, Python or shell
+reference in the front end (`langc eval`): the C tool `test/wasmtool.c`
+(the wasmtime C API, Q-S8-7) runs each module. S8 deletes the kit node
+harness `test/run-wasm.mjs`. No new node, Python or shell
 harness: new tests are guest `.lang` files and C tools, as in the kit.
 
 ## 7. Agent adoption (A1 to A6)
@@ -359,8 +365,8 @@ intent-lang.
 | S5 | Part R: Record, append, head, verify, Inclusion (hash chain); laws L1 to L5. | DONE: `make -B check` EXIT 0; examples 54, parse refusals 19, check refusals 192, kit-only refusals 22, evals 227, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 12 tool regressions passed. Each count is at its target (`cairn-lang-work/S5-survey.md` section 4). The rises are the Part R rows: examples 53 to 54 (`examples/record.lang`), evals 216 to 227 (11 `record` rows; the target said about 226). `append` with `Constitution` and `Auth` moves to S7 (Q-S5-2 (a), O18). Mutants 6/6 KILLED: the `chainFrom` step without `H3 tagAppend`, and `snoc e r := r` (each a `PATH_END` check refusal); `verify` keeps the last position (row `verifyFirst`); `verify` without the `natEq f 0` guard (row `verifyMiss`); `verifyAt` without the first-entry check (row `verifyAtEntry`); the `u256IsSet` result type `U256` to `Nat` in `src/front/check.c` (a `TYPE_MISMATCH` check refusal). |
 | S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | DONE: `make -B check` EXIT 0; examples 55, parse refusals 19, check refusals 194, kit-only refusals 22, evals 237, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 13 tool regressions passed (new: `dkgtool`). Each count is at its target (`cairn-lang-work/S6-survey.md` section 4), but the evals target was 238: L6 (3 rows) and L7 are law rows in `examples/polity.lang`, not eval rows, so evals are 227 + 10 = 237. The rises are the Part D rows: examples 54 to 55 (`examples/polity.lang`), check refusals 192 to 194 (`polity-l9-swapped`, `polity-l8-nodecide`), evals 227 to 237 (10 `polity` rows). The DAO count is `countVotes` (Q-S6-12). Mutants 7/7 KILLED: `decideYes` with `tAmend + 1` (the L8 law, a `PATH_END` refusal of `polity.lang`); `amendAll` as a right fold (the L9 law, and `polity-l9-swapped` checks); the `tallyBox` unit `encEta 1` (the L6 law `l6Zero`); `castBallot` without the used-tag guard (row `castUsed`); `enact p s := s` (the L8 law); `dkg_reshare` without the Lagrange weight (`dkgtool`, 2 FAIL lines); `thr_close` at part t - 1 (`thresholdtool`, 5 FAIL lines). |
 | S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | DONE: `make -B check` EXIT 0; examples 57, parse refusals 19, check refusals 196, kit-only refusals 22, evals 245, proves 2, build refusals 1, guest differential 28, runs 7, run refusals 11, time hint 1, 11 interpreter regressions and 14 tool regressions passed (new: `frosttool`). Each count is at its target (`cairn-lang-work/S7-survey.md` section 4), but the examples target was 56: `examples/outlog.lang` is the run program of the host append (O20), so examples are 55 + 2 = 57. The rises are the append rows: examples 55 to 57 (`examples/append.lang`, `examples/outlog.lang`), check refusals 194 to 196 (`schnorr-type`, `append-swap`), evals 237 to 245 (8 `append` rows), runs 6 to 7 (`outlog`). `append` takes an `Auth` (O18) and `langc run` appends each `Out` entry to the record (O20). Mutants 9/9 KILLED: `frost_rho` without the list B (`frosttool`, 2 FAIL lines); the challenge without head r (the L10 law, a `PATH_END` refusal of `append.lang`, and `frosttool` KAT c); the aggregator without the share check (`frosttool`, 2 FAIL lines); lambda over the indices 1 to 8, not the set S (`frosttool`, 7 FAIL lines); no negation for the key with the larger y (`frosttool`, 2 FAIL lines); `schnorrOk` without the z test (the L11 law); `append` with the `flagIf` branches swapped (the L10 law); the nonce without SEED (`frosttool`, 2 FAIL lines); the run entry without the tag (`run gate: 1 failures`). |
-| S8 | Wasm: lower the ported core to the IR, the crypto prelude, differential vectors. | NEXT |
-| S9 | ES module + JSON: port `js.c` and `json.c`, the BigInt prelude, `REFUSE_TARGET_SECRET`. | |
+| S8 | Wasm: lower the ported core to the IR, the crypto prelude, differential vectors. | DONE: `make -B check` EXIT 0; examples 57, parse refusals 19, check refusals 197, kit-only refusals 22, evals 245, proves 2, build refusals 5, ir 56 lowered and 1 refused (HOST-LIMIT), wasm 56 modules valid, wasm differential 81 rows with 0 mismatches, test/ir wasm 5 modules valid and 32 rows with 0 mismatches, guest differential 28, runs 7, run refusals 11, time hint 1, 11 interpreter regressions and 15 tool regressions passed (new: `wasm regressions`, on the vectors `test/wasm/hash.txt` and `test/wasm/secp.txt`, so the gate prints its line two times). Each count is at its target (`cairn-lang-work/S8-survey.md` section 4). The rises are the Wasm rows: check refusals 196 to 197 (`domain-name`, Q-S8-8), build refusals 1 to 5 (the "pending S8" row goes; the new rows are a run-time closure, a run-time tree, a TRANSP that does not reduce, the ZK op of `examples/zk.lang` and a build without `--kit`), and the new `ir`, `wasm` and `test/ir wasm` lines. `test/run-wasm.mjs` and `test/grid.awk` are gone (O13). Mutants 10/10 KILLED: `IR_OP_DIV` emits `i64.rem_u` (`wasm differential`, 2 FAIL lines); `natDiv` by 0 without the trap flag (row `ratio 7 0`); one round constant of the SHA-256 prelude (`wasm regressions`, hash 5 of 6 rows); one carry of the prelude field multiply dropped (secp 23 of 28 rows); the `FreeMon` tree refusal removed (`build test/ir/tree.lang`); the TRANSP refusal removed (`build test/ir/transp.lang`); the Flag argument guard removed (row `pick 2 4 9`); the U256 limb order swapped (4 FAIL lines, hash 4 of 6 rows, secp 18 of 33 rows); `keep_end` in `src/front/eval.c` (Q-S8-13); the point lift without the `y := p - y` select (secp row `sigOk` 1). |
+| S9 | ES module + JSON: port `js.c` and `json.c`, the BigInt prelude, `REFUSE_TARGET_SECRET`. | NEXT |
 | S10 | WGSL: port `wgsl.c`, batch proof check and chain rehash kernels. | |
 | S11 | A1: canonical forms and `langc fmt`. | |
 | S12 | A2: `langc check --json`. | |
@@ -396,7 +402,11 @@ intent-lang.
   points to), and the empty string from the NIST CAVP file
   `SHA256ShortMsg.rsp` (Q-S4-5 (a)). `test/secptool.c` has G and n as the
   SEC 2 version 2 section 2.4.1 words, and checks `group_gen` against them.
-- O8 A linear fold over `FreeMon Entry` at run time (S8). The kit refuses
+- O8 DONE (S8, Q-S8-6 (a)). A run-time fold over a linear `FreeMon` spine
+  (one side of each `fmMul` is a static leaf) lowers. A run-time fold over
+  a tree refuses with `REFUSE_RUNTIME_TREE` (HOST-LIMIT, the build row
+  `test/ir/tree.lang`). The plan text:
+  A linear fold over `FreeMon Entry` at run time (S8). The kit refuses
   a run-time fold over a tree; a record is a tree with one spine. Either
   the lowering accepts the linear case, or the record lowers to an array
   and a count.
@@ -421,12 +431,25 @@ intent-lang.
   `examples/*.lang` rows. `domain/README.md` still describes the seed
   domain. S5 writes a Part R example and the domain README, and removes
   both seed files.
-- O13 (S2) Out of the build until S8: `src/front/lower.c`,
+- O13 DONE (S8). Each file is back in the gate or gone.
+  `src/front/lower.c`, `src/front/lower.h`, `src/wasm.c` and `src/ir.h`
+  build, and `check-clang` compiles them. The `test/ir/*.lang` rows are in
+  the `ir`, `test/ir wasm` and build refusal lines. The kit row
+  `test/check/domain-name.lang` has an expect line (Q-S8-8 (a)).
+  `test/run-wasm.mjs` and `test/grid.awk` are gone: `test/wasmtool.c` and
+  the `wasm differential` gate line replace them. The S2 text:
+  (S2) Out of the build until S8: `src/front/lower.c`,
   `src/front/lower.h`, `src/wasm.c`, `src/ir.h` (the e222eba copy),
   `test/ir/*.lang` (5 rows), `test/run-wasm.mjs`, `test/grid.awk` and the
   kit row `test/check/domain-name.lang` (no expect line). S8 puts each back
   in the gate or removes it.
-- O14 (S2) `langc build` and `langc abi` refuse with `REFUSE_LOWER`
+- O14 DONE (S8). `langc build PROG -o OUT` writes a Wasm module, and
+  `langc abi PROG --text` prints its entries. The `wasm`, `wasm
+  differential` and `wasm regressions` gate lines run both. The "target
+  pending S8" refusal is gone. A part that does not lower refuses with
+  `REFUSE_LOWER` and a HOST-LIMIT detail. The `Options` fields
+  `out_path`, `runtime` and `json` are in use. The S2 text:
+  (S2) `langc build` and `langc abi` refuse with `REFUSE_LOWER`
   ("target pending S8"). Only `build` has a gate row. `-o`, `--runtime` and
   `abi --text` still parse, and the `Options` fields `out_path`, `runtime`
   and `json` have no use until S8. `langc contract` lived in the removed
@@ -447,7 +470,9 @@ intent-lang.
   (S3) `len` is a C builtin (section 4). If a later slice gives the
   domain `isSet Nat` and the `natAdd` paths, `len` becomes a domain fold
   over `fmFold`, and `OP_FM_LEN` goes.
-- O17 (S4) `src/front/lower.c` does not compile with clang: `OP_EQ` and
+- O17 DONE (S8, Q-S8-1 (a)). `src/front/lower.c` is adapted in place to
+  the ported core, and `check-clang` compiles it. The S4 text:
+  (S4) `src/front/lower.c` does not compile with clang: `OP_EQ` and
   `OP_REFL` are not declared in the ported `core.h`. This was so before S4.
   The file is out of the build (O13), so the gate does not see it. S8
   adapts the file (6.1).
@@ -476,7 +501,14 @@ intent-lang.
   (S5, Q-S5-7 (a)) The host append goes to S7: `langc run` hashes
   each `Out` value to an `Entry` and appends it to the record under the
   committee key.
-- O21 (S5) `formers/tcc-wasm.md` is older than `FreeMon`: row F4 still
+- O21 DONE (S8, Q-S8-9 (a)). In `formers/tcc-wasm.md`, row F4 is
+  `FreeMon` now: a run-time fold over a linear spine lowers (O8), and a
+  tree refuses with `REFUSE_RUNTIME_TREE`. Each `src/front/lower.c` and
+  `src/front/check.c` cite names a current line. F9 and F10 cite no
+  `check.c` line, because Pi is not a builtin row. F15 also cites the
+  `FreeMon` family (`domain/domain.lang:104`, `examples/formers.lang:13`).
+  The S5 text:
+  (S5) `formers/tcc-wasm.md` is older than `FreeMon`: row F4 still
   says `List` and cites `src/front/lower.c` lines, but
   `examples/formers.lang:13` is a `FreeMon` now. S5 changed only the
   cites to removed or moved lines (F4, F15). S8 (the Wasm lower, O13)
@@ -491,6 +523,16 @@ intent-lang.
   the append committee signs, but it does not check an Auth. A `langc
   run` that checks a given Auth under `keyAppend` is open. No slice owns
   this gap yet.
+- O24 (S8) `langc ir` skips an entry whose result type is a family. It
+  gives no function and no refusal. No slice owns this gap yet.
+- O25 (S8) Two lowering paths have no value row. `bin_case`: a direct
+  fold into `Nat` has no `FreeMon` user, and the composition loop does not
+  call it. The `cases_of` site of `family_fold`: no row has a run-time
+  fold over a family with no recursive field. No slice owns this gap yet.
+- O26 (S8) The mutant M5 removes the `REFUSE_RUNTIME_TREE` of a run-time
+  constructor without a static leaf side (`src/front/lower.c:703`). The
+  second `REFUSE_RUNTIME_TREE` (`src/front/lower.c:1306`, a fold over a
+  tree) has no mutant. No slice owns this gap yet.
 
 ## 11. Questions for the USER (S0)
 

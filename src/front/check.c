@@ -4644,14 +4644,16 @@ int entry_of(Machine *m, const Value *type, Entry *out) {
   const Value *t = type;
   memset(out, 0, sizeof *out);
   while (t != NULL && t->kind == VAL_PI && out->param_count < ENTRY_PARAMS_MAX) {
-    if (!val_is(t->dom, OP_NAT) && !val_is(t->dom, OP_FLAG))
+    if (!val_is(t->dom, OP_NAT) && !val_is(t->dom, OP_FLAG) && !val_is(t->dom, OP_U256))
       return 0;
     out->param_flag[out->param_count] = val_is(t->dom, OP_FLAG);
+    out->param_u256[out->param_count] = val_is(t->dom, OP_U256);
     t = closure_apply(m, t, val_var(m, out->param_count));
     out->param_count++;
   }
   out->result_flag = val_is(t, OP_FLAG);
-  return val_is(t, OP_NAT) || val_is(t, OP_FLAG);
+  out->result_u256 = val_is(t, OP_U256);
+  return val_is(t, OP_NAT) || out->result_flag || out->result_u256;
 }
 
 static int parse_u64(const char *s, uint64_t *out) {
@@ -4753,7 +4755,15 @@ static int print_result(Machine *m, const char *name, const Value *v, FILE *out,
       return 0;
     }
     break;
-  case VAL_WORD:
+  case VAL_WORD: {
+    /* A U256 result (Q-S8-3) prints its normal form, as before it was an entry. */
+    char *buf = arena_alloc(m->arena, PRINT_MAX);
+    if (buf != NULL && value_print(m, NULL, 0, v, buf, PRINT_MAX)) {
+      fprintf(out, "%s\n", buf);
+      return 0;
+    }
+    break;
+  }
   case VAL_UNIV:
   case VAL_LAM:
   case VAL_PI:
@@ -4805,7 +4815,7 @@ int eval_command(Machine *m, const char *name, char *const *args, int arg_count,
     return 2;
   }
   for (i = 0; i < entry.param_count && v != NULL; i++) {
-    const Value *arg = entry_arg(m, args[i], entry.param_flag[i] ? ARG_TYPE_FLAG : ARG_TYPE_NAT);
+    const Value *arg = entry_arg(m, args[i], entry.param_flag[i] ? ARG_TYPE_FLAG : entry.param_u256[i] ? ARG_TYPE_U256 : ARG_TYPE_NAT);
     v = arg == NULL ? NULL : apply_value(m, v, arg);
   }
   if (v == NULL)

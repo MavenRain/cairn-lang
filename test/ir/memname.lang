@@ -1,0 +1,3 @@
+-- An entry named `memory` (a usual name of a Wasm memory export). Its module
+-- must build and be valid, and `memory` gives 1.
+def memory : Nat := 1

@@ -1,0 +1,5 @@
+def addX : (a b c d : U256) -> U256 := fun (a b c d : U256) => first (ecAdd (pair a b) (pair c d))
+def addY : (a b c d : U256) -> U256 := fun (a b c d : U256) => second (ecAdd (pair a b) (pair c d))
+def mulX : (x y k : U256) -> U256 := fun (x y k : U256) => first (ecMul (pair x y) k)
+def mulY : (x y k : U256) -> U256 := fun (x y k : U256) => second (ecMul (pair x y) k)
+def sigOk : (k r z m e : U256) -> Flag := fun (k r z m e : U256) => schnorrOk k r z m e

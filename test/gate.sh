@@ -157,19 +157,186 @@ prove_refused() {
 prove_refused 1 PROVE_BALLOT dao w0
 prove_refused 2 EVAL_ARGS dao b0 x
 
-# The target (S2). The EVM writer is not ported and the cairn target comes in
-# S8, so `langc build examples/dao.lang` must exit 1, print `langc:
-# REFUSE_LOWER: -: ...target pending S8...` on stderr and write nothing on
-# stdout.
-builds=0
+# The target (S8, Q-S8-8). `langc build examples/dao.lang -o OUT` must exit 0,
+# write nothing on stdout and write a valid module. build_refused FLAGS CODE
+# FILE: `langc FLAGS build FILE -o OUT` must exit 1, print `langc: CODE: ...` on
+# stderr and write nothing on stdout.
 status=0
-build/langc $(kit examples/kit.txt dao.lang) build examples/dao.lang >"$tmp/out" 2>"$tmp/err" || status=$?
-builds=$((builds + 1))
-case "$status:$(head -n 1 "$tmp/err"):$(wc -c <"$tmp/out" | tr -d ' ')" in
-  "1:langc: REFUSE_LOWER: -: "*"target pending S8"*":0") ;;
-  *) echo "FAIL build dao: want exit 1, REFUSE_LOWER and target pending S8, got exit $status: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)) ;;
+build/langc $(kit examples/kit.txt dao.lang) build examples/dao.lang -o "$tmp/dao.wasm" >"$tmp/out" 2>"$tmp/err" || status=$?
+case "$status:$(wc -c <"$tmp/out" | tr -d ' ')" in
+  0:0) wasm-validate "$tmp/dao.wasm" 2>"$tmp/err" || { echo "FAIL build dao: the module is not valid: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)); } ;;
+  *) echo "FAIL build dao: want exit 0 and no stdout, got exit $status: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)) ;;
 esac
+builds=0
+build_refused() {
+  flags=$1
+  code=$2
+  file=$3
+  status=0
+  build/langc $flags build "$file" -o "$tmp/refused.wasm" >"$tmp/out" 2>"$tmp/err" || status=$?
+  builds=$((builds + 1))
+  case "$status:$(head -n 1 "$tmp/err"):$(wc -c <"$tmp/out" | tr -d ' ')" in
+    "1:langc: $code: "*":0") ;;
+    *) echo "FAIL build $file: want exit 1 and $code, got exit $status: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)) ;;
+  esac
+}
+build_refused --kit REFUSE_RUNTIME_CLOSURE test/ir/closure.lang
+build_refused --kit REFUSE_RUNTIME_TREE test/ir/tree.lang
+build_refused --kit REFUSE_LOWER examples/zk.lang
+build_refused --kit REFUSE_LOWER test/ir/transp.lang
+build_refused "" REFUSE_KIT test/ir/comb.lang
 echo "build refusals: $builds checked"
+
+# The IR (Q-S8-7): each example lowers, with one `func` line for each `abi
+# --text` line, and its module is valid (`wasm-validate`, `wasm-objdump -x`).
+# An example that does not lower must refuse REFUSE_LOWER with a HOST-LIMIT
+# detail (a host proof check, as examples/zk.lang; the secp256k1 ops of part B
+# lower).
+irs=0
+host_limits=0
+wasms=0
+for f in examples/*.lang; do
+  k=$(kit examples/kit.txt "${f#examples/}")
+  status=0
+  build/langc $k ir "$f" >"$tmp/ir.txt" 2>"$tmp/ir.err" || status=$?
+  case "$status:$(head -n 1 "$tmp/ir.err")" in
+    "1:langc: REFUSE_LOWER: "*"(HOST-LIMIT)"*) host_limits=$((host_limits + 1)); continue ;;
+    0:) ;;
+    *) echo "FAIL ir $f: exit $status: $(head -n 1 "$tmp/ir.err")"; fail=$((fail + 1)); continue ;;
+  esac
+  funcs=$(rg -c '^func ' "$tmp/ir.txt" || echo 0)
+  entries=$(build/langc $k abi "$f" --text | rg -c '.' || echo 0)
+  [ "$funcs" -eq "$entries" ] || { echo "FAIL ir $f: $funcs funcs for $entries entries"; fail=$((fail + 1)); continue; }
+  irs=$((irs + 1))
+  w="$tmp/$(basename "$f" .lang).wasm"
+  if ! build/langc $k build "$f" -o "$w" 2>"$tmp/w.err" || ! wasm-validate "$w" 2>>"$tmp/w.err" ||
+    ! wasm-objdump -x "$w" >/dev/null 2>>"$tmp/w.err"; then
+    echo "FAIL wasm $f: $(head -n 1 "$tmp/w.err")"
+    fail=$((fail + 1))
+    continue
+  fi
+  wasms=$((wasms + 1))
+done
+echo "ir: $irs lowered, $host_limits refused (HOST-LIMIT)"
+echo "wasm: $wasms modules valid"
+
+# The Wasm differential (Q-S8-7): each test/eval/expect.txt row whose NAME is an
+# entry of FILE (a line of its `abi --text`) runs on the module in
+# build/wasmtool and must print the row OUTPUT (a trap is a trap). Each FILE
+# builds once and runs once, with its rows on stdin.
+mkdir -p "$tmp/wd"
+while IFS= read -r line; do
+  want=${line#* => }
+  set -- ${line%% => *}
+  file=$1
+  shift
+  if [ ! -f "$tmp/wd/$file.abi" ]; then
+    k=$(kit examples/kit.txt "$file.lang")
+    : >"$tmp/wd/$file.abi"
+    build/langc $k build "examples/$file.lang" -o "$tmp/wd/$file.wasm" 2>/dev/null &&
+      build/langc $k abi "examples/$file.lang" --text >"$tmp/wd/$file.abi" 2>/dev/null || :
+  fi
+  rg -q "^$1 \(" "$tmp/wd/$file.abi" || continue
+  echo "$*" >>"$tmp/wd/$file.in"
+  echo "$want" >>"$tmp/wd/$file.want"
+done <test/eval/expect.txt
+rows=0
+mismatches=0
+for in_file in "$tmp"/wd/*.in; do
+  file=$(basename "$in_file" .in)
+  if ! build/wasmtool "$tmp/wd/$file.wasm" "$tmp/wd/$file.abi" <"$in_file" >"$tmp/wd/$file.got" 2>"$tmp/w.err"; then
+    echo "FAIL wasmtool $file: $(head -n 1 "$tmp/w.err")"
+    fail=$((fail + 1))
+    continue
+  fi
+  rows=$((rows + $(rg -c '.' "$in_file")))
+  paste -d '|' "$in_file" "$tmp/wd/$file.want" "$tmp/wd/$file.got" | awk -F '|' '$2 != $3' >"$tmp/bad.txt"
+  bad=$(rg -c '.' "$tmp/bad.txt" || echo 0)
+  mismatches=$((mismatches + bad))
+  [ "$bad" -eq 0 ] || { echo "FAIL wasm differential $file: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
+done
+echo "wasm differential: $rows rows, $mismatches mismatches"
+# A Flag argument larger than 1 traps (langc eval refuses it with EVAL_ARGS).
+got=$(echo 'pick 2 4 9' | build/wasmtool "$tmp/wd/entries.wasm" "$tmp/wd/entries.abi" 2>&1) || true
+[ "$got" = "trap" ] || { echo "FAIL wasm pick 2 4 9: want trap, got $got"; fail=$((fail + 1)); }
+
+# The test/ir modules (A7 piece (c)): each builds in --kit mode to a valid
+# module. Each row `FILE NAME ARGS` below runs on the module of test/ir/FILE.lang
+# in build/wasmtool and must print the `langc --kit eval` output (a trap is
+# `trap`).
+mkdir -p "$tmp/ir"
+ir_mods=0
+for m in comb lazy spine proof-trap memname; do
+  if ! build/langc --kit build "test/ir/$m.lang" -o "$tmp/ir/$m.wasm" 2>"$tmp/w.err" ||
+    ! wasm-validate "$tmp/ir/$m.wasm" 2>>"$tmp/w.err" ||
+    ! build/langc --kit abi "test/ir/$m.lang" --text >"$tmp/ir/$m.abi" 2>>"$tmp/w.err"; then
+    echo "FAIL test/ir wasm $m: $(head -n 1 "$tmp/w.err")"
+    fail=$((fail + 1))
+    continue
+  fi
+  ir_mods=$((ir_mods + 1))
+  : >"$tmp/ir/$m.in"
+  : >"$tmp/ir/$m.want"
+done
+while IFS= read -r line; do
+  set -- $line
+  m=$1
+  shift
+  [ -f "$tmp/ir/$m.in" ] || continue
+  want=$(build/langc --kit eval "test/ir/$m.lang" "$@" 2>/dev/null) || :
+  [ -n "$want" ] || { echo "FAIL test/ir eval $line: no output"; fail=$((fail + 1)); continue; }
+  echo "$*" >>"$tmp/ir/$m.in"
+  echo "$want" >>"$tmp/ir/$m.want"
+done <<'EOF'
+comb snocChain 0
+comb snocChain 1
+comb snocChain 3
+comb snocRun 0
+comb snocRun 1
+comb snocRun 3
+comb consChain 0
+comb consChain 1
+comb consChain 3
+comb consRun 0
+comb consRun 1
+comb consRun 3
+comb mixChain 0
+comb mixChain 1
+comb mixChain 3
+comb mixRun 0
+comb mixRun 1
+comb mixRun 3
+comb snocLen 0
+comb snocLen 1
+comb snocLen 3
+lazy lazy 3
+spine trapHead 3
+spine trapSum 3
+spine filterTrap 3
+spine bindTrap 3
+proof-trap proofMove 0
+proof-trap proofMove 18446744073709551615
+proof-trap proofSymm 18446744073709551615
+proof-trap proofTrans 18446744073709551615
+proof-trap proofCong 18446744073709551615
+memname memory
+EOF
+ir_rows=0
+ir_bad=0
+for m in comb lazy spine proof-trap memname; do
+  [ -f "$tmp/ir/$m.in" ] || continue
+  if ! build/wasmtool "$tmp/ir/$m.wasm" "$tmp/ir/$m.abi" <"$tmp/ir/$m.in" >"$tmp/ir/$m.got" 2>"$tmp/w.err"; then
+    echo "FAIL wasmtool test/ir/$m.lang: $(head -n 1 "$tmp/w.err")"
+    fail=$((fail + 1))
+    continue
+  fi
+  ir_rows=$((ir_rows + $(rg -c '.' "$tmp/ir/$m.in" || echo 0)))
+  paste -d '|' "$tmp/ir/$m.in" "$tmp/ir/$m.want" "$tmp/ir/$m.got" | awk -F '|' '$2 != $3' >"$tmp/bad.txt"
+  bad=$(rg -c '.' "$tmp/bad.txt" || echo 0)
+  ir_bad=$((ir_bad + bad))
+  [ "$bad" -eq 0 ] || { echo "FAIL test/ir wasm $m: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
+done
+echo "test/ir wasm: $ir_mods modules valid, $ir_rows rows, $ir_bad mismatches"
 
 # The differential (S9 B2) in the guest. A row of test/contract/diff.txt is
 # `PROG START GUEST PERMUTED BALLOTS NAME... => OUTCOME SELF`: `langc eval

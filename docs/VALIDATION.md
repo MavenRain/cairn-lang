@@ -50,6 +50,8 @@ stay in PLAN section 5.
 | Item | Since | Assumption |
 |---|---|---|
 | V5 | S6, Q-S0-7 (a), Q-S6-8 (a) | The Pedersen DKG lets a member bias the distribution of the public key (Gennaro, Jarecki, Krawczyk, Rabin). The security of ElGamal and of the threshold Schnorr signature under that bias is an assumption (PLAN section 5, row V5). |
+| V6 | S8, Q-S8-9 (a) | The Wasm runner (wasmtime 48.0.1, the C API that `test/wasmtool.c` links) runs a module as the Wasm MVP specification says, and `wasm-validate` (wabt 1.0.40) accepts only a valid module. The `wasm differential` and `wasm regressions` rows hold only under this assumption. |
+| V7 | S8, Q-S8-9 (a) | The Wasm prelude uses the algorithms of `secp256k1.c`. Nobody checks the prelude for constant time. O6 (S9) owns secret data on a target. |
 
 `src/front/dkg.c` deals and reshares the keys `keyOpen` and `keyAppend`:
 a Pedersen DKG with Feldman commitments and a Schnorr proof for each dealt

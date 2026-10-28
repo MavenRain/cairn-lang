@@ -352,6 +352,9 @@ typedef struct {
   /* Each Glue that a true key reduced, newest first. transp at Glue reads
      them to get A, phi and sys at an end. */
   const struct GlueRec *glue_recs;
+  /* Set by the lowering (Q-S8-13): a neutral path at an end keeps the
+     path for every endpoint value, so its trap flag reaches the result. */
+  int keep_ends;
 } Machine;
 
 /* One Glue that a true key reduced. OUT is the result, a fresh copy of the

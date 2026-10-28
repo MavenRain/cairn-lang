@@ -6,6 +6,8 @@
 
 #include "front/check.h"
 #include "front/front.h"
+#include "front/lower.h"
+#include "target.h"
 
 #define ARENA_LIMIT_BYTES ((size_t)1 << 30)
 
@@ -51,7 +53,7 @@ static int usage(FILE *err) {
         "       langc [--kit] run PROG SCRIPT\n"
         "       langc [--kit] ir PROG\n"
         "       langc [--kit] abi PROG [--text]\n"
-        "       langc [--kit] build PROG [-o OUT] [--runtime]\n"
+        "       langc [--kit] build PROG -o OUT [--runtime]\n"
         "       langc [--kit] prove PROG NAME [POLL]\n"
         "--kit: the kit mode, the trusted test scope of the kit gate\n", err);
   return 2;
@@ -76,7 +78,8 @@ static int parse_build_options(int argc, char **argv, Options *opt, Diag *diag) 
     opt->runtime |= is_runtime;
     i += is_out;
   }
-  return 1;
+  /* Q-S8-8: build writes a file, so -o OUT is required. */
+  return opt->out_path != NULL ? 1 : diag_fail(diag, "USAGE", NULL, "build needs -o OUT");
 }
 
 static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
@@ -145,6 +148,60 @@ static const char *command_word(Command command) {
   return "?";
 }
 
+/* The ABI comes from checked types, independently of lowering. An omitted
+   IR function must not disappear from both sides of the gate's count check. */
+static int print_abi(Machine *machine) {
+  uint32_t i;
+  uint32_t k;
+  Entry entry;
+  IrFunc fn;
+  IrScalar params[ENTRY_PARAMS_MAX];
+  memset(&fn, 0, sizeof fn);
+  fn.params = params;
+  for (i = 0; i < machine->def_count; i++) {
+    machine->fuel = EVAL_FUEL_STEPS;
+    if (machine->defs[i].origin != ORIGIN_PROGRAM || !entry_of(machine, machine->defs[i].type, &entry))
+      continue;
+    fn.name = machine->defs[i].name;
+    fn.param_count = entry.param_count;
+    for (k = 0; k < entry.param_count; k++)
+      params[k] = entry.param_flag[k] ? IR_SCALAR_FLAG : entry.param_u256[k] ? IR_SCALAR_U256 : IR_SCALAR_NAT;
+    fn.result = entry.result_flag ? IR_SCALAR_FLAG : entry.result_u256 ? IR_SCALAR_U256 : IR_SCALAR_NAT;
+    if (!target_abi_line(&fn, stdout, stderr))
+      return 1;
+  }
+  return machine->diag->set ? 1 : 0;
+}
+
+/* Lowers the entries, then runs the ir or build command (the kit target). */
+static int run_target(const Options *opt, Machine *machine, Diag *diag) {
+  IrProgram prog;
+  FILE *out;
+  int ok = 1;
+  if (opt->command == CMD_ABI) return print_abi(machine);
+  if (!lower_program(machine, &prog)) return 1;
+  switch (opt->command) {
+    case CMD_IR:
+      ir_print(&prog, stdout);
+      return 0;
+    case CMD_ABI:
+    case CMD_CHECK:
+    case CMD_EVAL:
+    case CMD_RUN:
+    case CMD_PROVE:
+    case CMD_BUILD:
+      break;
+  }
+  out = fopen(opt->out_path, "wb");
+  if (out == NULL) return diag_fail(diag, "IO", NULL, "cannot write '%s'", opt->out_path) + 2;
+  ok = target_write(&prog, opt->runtime ? TARGET_PART_RUNTIME : TARGET_PART_MAIN, out, stderr);
+  ok = fclose(out) == 0 && ok;
+  if (ok) return 0;
+  remove(opt->out_path);
+  diag_fail(diag, "BUILD", NULL, "no module written; '%s' removed", opt->out_path);
+  return 1;
+}
+
 static int run(const Options *opt, Arena *arena, Diag *diag) {
   char *text = NULL;
   size_t len = 0;
@@ -168,14 +225,15 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
     case CMD_PROVE:
       signal(SIGPIPE, SIG_IGN);
       return prove_command(&machine, opt->entry, opt->arg_count == 1 ? opt->args[0] : NULL, stdout, stderr);
-    case CMD_BUILD:
     case CMD_ABI:
-      /* The EVM writer is not ported: the cairn target comes in S8. */
-      return diag_fail(diag, "REFUSE_LOWER", NULL, "%s: target pending S8", command_word(opt->command)) + 1;
-    case CMD_IR:
+      /* Q-S8-8: the JSON abi (the default) is planned for S9; --text works. */
+      if (!opt->json) return run_target(opt, &machine, diag);
       break;
+    case CMD_IR:
+    case CMD_BUILD:
+      return run_target(opt, &machine, diag);
   }
-  diag_fail(diag, "PLANNED", NULL, "the %s command is not built yet (target pending S8)", command_word(opt->command));
+  diag_fail(diag, "PLANNED", NULL, "the JSON %s is not built yet (pending S9): use --text", command_word(opt->command));
   return 1;
 }
 

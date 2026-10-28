@@ -15,7 +15,7 @@ This kit and `hosts/tcc-evm` share these files. `TCC_SHARED` in the root
 - the domain and its embed tool: `domain/` and `gen/`
 - the examples: `examples/`
 - the shared tests: `test/parse/`, `test/check/`, `test/eval/`, `test/ir/`,
-  `test/grid.awk`, `test/review.sh` and `test/fronttool.c`
+  `test/review.sh` and `test/fronttool.c`
 - `.gitignore`
 
 `make check` at the template root compares each shared entry in the two
@@ -26,7 +26,8 @@ same change in `hosts/tcc-evm`.
 These files are specific to this kit:
 
 - the target file: `src/wasm.c`
-- the target test file: `test/run-wasm.mjs`
+- the target test files: `test/wasmtool.c` (the Wasm runner on the
+  wasmtime C API) and `test/wasm/` (the prelude vectors)
 - the build and gate files: `Makefile`, `test/gate.sh` and `PIN`
 - the docs: `README.md`, `FORMERS.md` and `docs/CAPABILITY.md`
 
@@ -164,21 +165,32 @@ what the domain holds and how to change it.
 
 | Line | What the gate does |
 |---|---|
-| `examples: 10 checked, 0 failed` | `langc check` accepts each `examples/*.lang` file |
-| `parse refusals: 9 checked` | each `test/parse` file fails with the code in `test/parse/expect.txt`; one file has 1100 nested parentheses |
-| `check refusals: 19 checked` | each `test/check` mutant fails with the code in `test/check/expect.txt`; the `TYPE_REFL` message shows both normal forms |
-| `evals: 32 checked` | `langc eval` gives each result in `test/eval/expect.txt` |
-| `ir: 10 lowered` | `langc ir` lowers each example, with one `func` for each `abi` line |
-| `wasm: 13 modules valid` | `langc build` writes a module for each example and for `test/ir/spine.lang`, `test/ir/lazy.lang` and `test/ir/proof-trap.lang`; `wasm-validate` and `wasm-objdump -x` accept it |
-| `differential: 813 cases, 0 mismatches` | node runs each entry on the grid of `test/grid.awk`; each result is equal to the `langc eval` result, and a trap is equal to a trap |
+| `examples: 57 checked, 0 failed` | `langc check` accepts each `examples/*.lang` file |
+| `parse refusals: 19 checked` | each `test/parse` file fails with the code in `test/parse/expect.txt`; one file has 1100 nested parentheses |
+| `check refusals: 197 checked` | each `test/check` mutant fails with the code in `test/check/expect.txt`; the `TYPE_REFL` message shows both normal forms |
+| `evals: 245 checked` | `langc eval` gives each result in `test/eval/expect.txt` |
+| `build refusals: 5 checked` | `langc build examples/dao.lang -o OUT` exits 0, writes nothing on stdout and writes a valid module; each refused build exits 1 with its code and writes nothing on stdout; the rows include the transp row (`test/ir/transp.lang`, `REFUSE_LOWER`) and a guest-mode `REFUSE_KIT` row |
+| `ir: 56 lowered, 1 refused (HOST-LIMIT)` | `langc ir` lowers each example, with one `func` for each `abi --text` line derived independently from checked types; an example that does not lower refuses `REFUSE_LOWER` with a `HOST-LIMIT` detail |
+| `wasm: 56 modules valid` | `langc build` writes a module for each lowered example, and `wasm-validate` and `wasm-objdump -x` accept it |
+| `wasm differential: 81 rows, 0 mismatches` | `build/wasmtool` (`test/wasmtool.c`, on the wasmtime C API) runs each `test/eval/expect.txt` row whose name is an entry of its file; each result is equal to the row result, and a trap is equal to a trap |
+| `test/ir wasm: 5 modules valid, 32 rows, 0 mismatches` | each `test/ir` module builds in `--kit` mode and is valid, and each row of the gate list gives the same result on `build/wasmtool` and in `langc --kit eval` |
 | `gate: 0 failures` | the sum of all failures |
 
 The gate also checks the usage and IO exit codes, five `eval` refusals,
 `test/ir/closure.lang` (`REFUSE_RUNTIME_CLOSURE`), `test/ir/tree.lang`
-(`REFUSE_RUNTIME_TREE`), the 13 cases of `test/ir/spine.lang`,
+(`REFUSE_RUNTIME_TREE`), the 11 entries of `test/ir/spine.lang`,
 `pick 2 4 9` = `trap` on Wasm, and the absence of em-dashes and en-dashes
-in the kit. `perl bin/doc-check.pl hosts/tcc-wasm` must report 0
+in the kit. The lowering computes a path of data that is stuck at compile
+time before it takes the end point of the path, so a trap in the path
+reaches the result: the 4 entries of `test/ir/proof-trap.lang` trap at
+18446744073709551615 on Wasm. `perl bin/doc-check.pl hosts/tcc-wasm` must report 0
 problems.
+
+`make check` also compares the 24 fixed rows in `test/wasm/traps.txt`
+against the evaluator and Wasm. They cover neutral path endpoints,
+trapped curve coordinates, and unused invalid curve results. It checks
+that `abi --text` still reports checked signatures when lowering refuses
+`test/ir/transp.lang`.
 
 ## Known limits
 

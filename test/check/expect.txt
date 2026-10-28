@@ -4,6 +4,7 @@ rec.lang REFUSE_REC
 self.lang REFUSE_REC
 later.lang REFUSE_REC
 core-name.lang REFUSE_NAME
+domain-name.lang REFUSE_NAME
 reserved.lang REFUSE_NAME
 duplicate.lang REFUSE_NAME
 bad-refl.lang PATH_END
