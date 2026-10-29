@@ -30,6 +30,9 @@ typedef enum {
 int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag, CheckMode mode);
 /* Returns 1 when TYPE is the type of an entry. */
 int entry_of(Machine *m, const Value *type, Entry *out);
+/* Returns 1 when TYPE has one or more scalar params and a family result: the
+   definition has no target form (O24). */
+int family_result_of(Machine *m, const Value *type);
 /* Evaluates the definition NAME on ARGS and prints the result. Returns 0, 1
    after a diagnostic, or 2 after an EVAL_ARGS diagnostic. */
 int eval_command(Machine *m, const char *name, char *const *args, int arg_count, FILE *out, FILE *err);

@@ -184,14 +184,39 @@ build_refused --kit REFUSE_RUNTIME_CLOSURE test/ir/closure.lang
 build_refused --kit REFUSE_RUNTIME_TREE test/ir/tree.lang
 build_refused --kit REFUSE_LOWER examples/zk.lang
 build_refused --kit REFUSE_LOWER test/ir/transp.lang
+build_refused --kit REFUSE_TARGET_SECRET test/ir/secret-key.lang
+build_refused --kit REFUSE_TARGET_SECRET test/ir/secret-sign.lang
 build_refused "" REFUSE_KIT test/ir/comb.lang
+build_refused --kit REFUSE_RUNTIME_TREE test/ir/tree-elim.lang
+# O26 (Q-S9-11): the elim limit of family_fold refuses, not the closure
+# check. build_refused checks the code only, so check the message too.
+case "$(head -n 1 "$tmp/err")" in
+  "langc: REFUSE_RUNTIME_TREE: t: a fold over a tree of Word must exist at run time (HOST-LIMIT)") ;;
+  *) echo "FAIL build test/ir/tree-elim.lang: want the Word tree message, got: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)) ;;
+esac
+# O24 (Q-S9-8): a def with scalar params and a family result has no target
+# form. The build skips it and writes one note for it on stderr.
+status=0
+build/langc $(kit examples/kit.txt state-no-history.lang) build examples/state-no-history.lang -o "$tmp/note.wasm" >"$tmp/out" 2>"$tmp/err" || status=$?
+case "$status:$(head -n 1 "$tmp/err")" in
+  "0:langc: note: mk: a family result has no target form (O24)") ;;
+  *) echo "FAIL build examples/state-no-history.lang: want exit 0 and the mk note, got exit $status: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)) ;;
+esac
+# O24 (Q-S9-10): a Prod or a List result is a family result too. The
+# pairOf def of examples/functions.lang gets the note.
+status=0
+build/langc $(kit examples/kit.txt functions.lang) build examples/functions.lang -o "$tmp/note.wasm" >"$tmp/out" 2>"$tmp/err" || status=$?
+case "$status:$(head -n 1 "$tmp/err")" in
+  "0:langc: note: pairOf: a family result has no target form (O24)") ;;
+  *) echo "FAIL build examples/functions.lang: want exit 0 and the pairOf note, got exit $status: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)) ;;
+esac
 echo "build refusals: $builds checked"
 
 # The IR (Q-S8-7): each example lowers, with one `func` line for each `abi
 # --text` line, and its module is valid (`wasm-validate`, `wasm-objdump -x`).
 # An example that does not lower must refuse REFUSE_LOWER with a HOST-LIMIT
 # detail (a host proof check, as examples/zk.lang; the secp256k1 ops of part B
-# lower).
+# lower). An example with a family-result def exits 0 with an O24 note.
 irs=0
 host_limits=0
 wasms=0
@@ -201,7 +226,7 @@ for f in examples/*.lang; do
   build/langc $k ir "$f" >"$tmp/ir.txt" 2>"$tmp/ir.err" || status=$?
   case "$status:$(head -n 1 "$tmp/ir.err")" in
     "1:langc: REFUSE_LOWER: "*"(HOST-LIMIT)"*) host_limits=$((host_limits + 1)); continue ;;
-    0:) ;;
+    0: | "0:langc: note: "*"(O24)") ;;
     *) echo "FAIL ir $f: exit $status: $(head -n 1 "$tmp/ir.err")"; fail=$((fail + 1)); continue ;;
   esac
   funcs=$(rg -c '^func ' "$tmp/ir.txt" || echo 0)
@@ -259,6 +284,30 @@ echo "wasm differential: $rows rows, $mismatches mismatches"
 # A Flag argument larger than 1 traps (langc eval refuses it with EVAL_ARGS).
 got=$(echo 'pick 2 4 9' | build/wasmtool "$tmp/wd/entries.wasm" "$tmp/wd/entries.abi" 2>&1) || true
 [ "$got" = "trap" ] || { echo "FAIL wasm pick 2 4 9: want trap, got $got"; fail=$((fail + 1)); }
+
+# The JS differential (S9 B4, Q-S9-6 (a)): the same rows run on the ES module
+# of `langc build FILE --js` in build/jstool (under node) and must print the
+# same OUTPUT.
+js_rows=0
+js_bad=0
+for in_file in "$tmp"/wd/*.in; do
+  file=$(basename "$in_file" .in)
+  k=$(kit examples/kit.txt "$file.lang")
+  if ! build/langc $k build "examples/$file.lang" --js "$tmp/wd/$file.mjs" 2>"$tmp/w.err" ||
+    ! build/jstool "$tmp/wd/$file.mjs" "$tmp/wd/$file.abi" <"$in_file" >"$tmp/wd/$file.js" 2>>"$tmp/w.err"; then
+    echo "FAIL jstool $file: $(head -n 1 "$tmp/w.err")"
+    fail=$((fail + 1))
+    continue
+  fi
+  js_rows=$((js_rows + $(rg -c '.' "$in_file")))
+  paste -d '|' "$in_file" "$tmp/wd/$file.want" "$tmp/wd/$file.js" | awk -F '|' '$2 != $3' >"$tmp/bad.txt"
+  bad=$(rg -c '.' "$tmp/bad.txt" || echo 0)
+  js_bad=$((js_bad + bad))
+  [ "$bad" -eq 0 ] || { echo "FAIL js differential $file: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
+done
+echo "js differential: $js_rows rows, $js_bad mismatches"
+got=$(echo 'pick 2 4 9' | build/jstool "$tmp/wd/entries.mjs" "$tmp/wd/entries.abi" 2>&1) || true
+[ "$got" = "trap" ] || { echo "FAIL js pick 2 4 9: want trap, got $got"; fail=$((fail + 1)); }
 
 # The test/ir modules (A7 piece (c)): each builds in --kit mode to a valid
 # module. Each row `FILE NAME ARGS` below runs on the module of test/ir/FILE.lang
@@ -337,6 +386,37 @@ for m in comb lazy spine proof-trap memname; do
   [ "$bad" -eq 0 ] || { echo "FAIL test/ir wasm $m: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
 done
 echo "test/ir wasm: $ir_mods modules valid, $ir_rows rows, $ir_bad mismatches"
+
+# The test/ir rows on the JS module (S9 B4): build/jstool must print the same
+# `langc --kit eval` output.
+ir_js_rows=0
+ir_js_bad=0
+for m in comb lazy spine proof-trap memname; do
+  [ -f "$tmp/ir/$m.in" ] || continue
+  if ! build/langc --kit build "test/ir/$m.lang" --js "$tmp/ir/$m.mjs" 2>"$tmp/w.err" ||
+    ! build/jstool "$tmp/ir/$m.mjs" "$tmp/ir/$m.abi" <"$tmp/ir/$m.in" >"$tmp/ir/$m.js" 2>>"$tmp/w.err"; then
+    echo "FAIL jstool test/ir/$m.lang: $(head -n 1 "$tmp/w.err")"
+    fail=$((fail + 1))
+    continue
+  fi
+  ir_js_rows=$((ir_js_rows + $(rg -c '.' "$tmp/ir/$m.in" || echo 0)))
+  paste -d '|' "$tmp/ir/$m.in" "$tmp/ir/$m.want" "$tmp/ir/$m.js" | awk -F '|' '$2 != $3' >"$tmp/bad.txt"
+  bad=$(rg -c '.' "$tmp/bad.txt" || echo 0)
+  ir_js_bad=$((ir_js_bad + bad))
+  [ "$bad" -eq 0 ] || { echo "FAIL test/ir js $m: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
+done
+echo "test/ir js: $ir_js_rows rows, $ir_js_bad mismatches"
+json_want='{"entries":[{"name":"addX","params":["u256","u256","u256","u256"],"result":"u256"},{"name":"addY","params":["u256","u256","u256","u256"],"result":"u256"},{"name":"mulX","params":["u256","u256","u256"],"result":"u256"},{"name":"mulY","params":["u256","u256","u256"],"result":"u256"},{"name":"sigOk","params":["u256","u256","u256","u256","u256"],"result":"flag"}]}'
+json_got=$(build/langc --kit abi test/wasm/secp.lang 2>&1) || json_got="exit $?"
+[ "$json_got" = "$json_want" ] || { echo "FAIL json abi: build/langc --kit abi test/wasm/secp.lang is not the JSON abi line"; fail=$((fail + 1)); }
+json_rc=0
+build/langc --kit abi test/wasm/secp.lang --bad > /dev/null 2> "$tmp/json-abi.err" || json_rc=$?
+json_msg=$(head -n 1 "$tmp/json-abi.err")
+case "$json_rc $json_msg" in
+  "2 "*USAGE*"abi takes only --text"*) ;;
+  *) echo "FAIL json abi: --bad gave exit $json_rc, line 1: $json_msg"; fail=$((fail + 1)) ;;
+esac
+echo "json abi: 2 checked"
 
 # The differential (S9 B2) in the guest. A row of test/contract/diff.txt is
 # `PROG START GUEST PERMUTED BALLOTS NAME... => OUTCOME SELF`: `langc eval

@@ -4656,6 +4656,18 @@ int entry_of(Machine *m, const Value *type, Entry *out) {
   return val_is(t, OP_NAT) || out->result_flag || out->result_u256;
 }
 
+int family_result_of(Machine *m, const Value *type) {
+  const Value *t = type;
+  uint32_t n = 0;
+  while (t != NULL && t->kind == VAL_PI && n < ENTRY_PARAMS_MAX) {
+    if (!val_is(t->dom, OP_NAT) && !val_is(t->dom, OP_FLAG) && !val_is(t->dom, OP_U256))
+      return 0;
+    t = closure_apply(m, t, val_var(m, n));
+    n++;
+  }
+  return n != 0u && (val_is(t, OP_FAMILY) || val_is(t, OP_PROD) || val_is(t, OP_LIST));
+}
+
 static int parse_u64(const char *s, uint64_t *out) {
   uint64_t n = 0;
   size_t i;

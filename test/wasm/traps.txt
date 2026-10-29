@@ -1,6 +1,7 @@
 # NAME ARGS => RESULT, fixed expectations for eval and Wasm.
 endN0 0 7 => 7
 endN0 18446744073709551615 7 => trap
+endN0 18446744073709551614 7 => 7
 endN1 0 7 => 7
 endN1 18446744073709551615 7 => trap
 varProof 0 1 => 0

@@ -1,0 +1,9 @@
+-- A guest elim over a run-time Word (cairn-lang S9, PLAN O26, Q-S9-11).
+-- wordLift has 2 recursive fields and no interval, so an elim (limit 1)
+-- gives the second REFUSE_RUNTIME_TREE of src/front/lower.c (family_fold).
+-- The motive is Nat, so no closure refusal comes first; the gate checks it.
+def t : (n : Nat) -> Nat := fun (n : Nat) => elim (fun (k : Size) (v : Word k) => Nat)
+    (fun (m : Size) => 0)
+    (fun (m : Size) (r : Word (szS (szS m))) (ihr : Nat) => ihr)
+    (fun (m : Size) (inn : Word m) (ihi : Nat) (r : Word (szS m)) (ihr : Nat) => natAdd ihi ihr)
+    (fold (fun (w : Word (szS sz0)) => wordLift sz0 (wordNil sz0) w) (wordNil (szS sz0)) n)

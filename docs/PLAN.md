@@ -32,8 +32,12 @@ record (O18 and O20). S8 DONE: `src/front/lower.c` lowers the ported
 core to the IR, `src/wasm.c` writes a Wasm module with a SHA-256 and
 secp256k1 prelude, a run-time fold over a linear `FreeMon` spine lowers
 (O8), and the C tool `test/wasmtool.c` runs each module on the wasmtime C
-API against `langc eval` (sections 6.2 and 9). Next: S9 (ES module +
-JSON).
+API against `langc eval` (sections 6.2 and 9). S9 DONE: `src/js.c`
+writes an ES module with a BigInt prelude from the same IR (`langc build
+PROG --js OUT.mjs`), `langc abi PROG` prints the JSON abi, the C tool
+`test/jstool.c` runs each module on node against the Wasm rows, and the
+build refuses a secret operation that is stuck at run time (O6). Next:
+S10 (WGSL).
 
 ## 1. Rulings
 
@@ -366,8 +370,8 @@ intent-lang.
 | S6 | Part D: Constitution, Ballot, cast, tallyEnc, open (the share that closes the ballot), decide, enact; the DKG and reshare; laws L6 to L9, V5. | DONE: `make -B check` EXIT 0; examples 55, parse refusals 19, check refusals 194, kit-only refusals 22, evals 237, proves 2, build refusals 1, guest differential 28, runs 6, run refusals 11, time hint 1, 11 interpreter regressions and 13 tool regressions passed (new: `dkgtool`). Each count is at its target (`cairn-lang-work/S6-survey.md` section 4), but the evals target was 238: L6 (3 rows) and L7 are law rows in `examples/polity.lang`, not eval rows, so evals are 227 + 10 = 237. The rises are the Part D rows: examples 54 to 55 (`examples/polity.lang`), check refusals 192 to 194 (`polity-l9-swapped`, `polity-l8-nodecide`), evals 227 to 237 (10 `polity` rows). The DAO count is `countVotes` (Q-S6-12). Mutants 7/7 KILLED: `decideYes` with `tAmend + 1` (the L8 law, a `PATH_END` refusal of `polity.lang`); `amendAll` as a right fold (the L9 law, and `polity-l9-swapped` checks); the `tallyBox` unit `encEta 1` (the L6 law `l6Zero`); `castBallot` without the used-tag guard (row `castUsed`); `enact p s := s` (the L8 law); `dkg_reshare` without the Lagrange weight (`dkgtool`, 2 FAIL lines); `thr_close` at part t - 1 (`thresholdtool`, 5 FAIL lines). |
 | S7 | Threshold Schnorr for appends: FROST-style signing in two rounds under `keyAppend`. | DONE: `make -B check` EXIT 0; examples 57, parse refusals 19, check refusals 196, kit-only refusals 22, evals 245, proves 2, build refusals 1, guest differential 28, runs 7, run refusals 11, time hint 1, 11 interpreter regressions and 14 tool regressions passed (new: `frosttool`). Each count is at its target (`cairn-lang-work/S7-survey.md` section 4), but the examples target was 56: `examples/outlog.lang` is the run program of the host append (O20), so examples are 55 + 2 = 57. The rises are the append rows: examples 55 to 57 (`examples/append.lang`, `examples/outlog.lang`), check refusals 194 to 196 (`schnorr-type`, `append-swap`), evals 237 to 245 (8 `append` rows), runs 6 to 7 (`outlog`). `append` takes an `Auth` (O18) and `langc run` appends each `Out` entry to the record (O20). Mutants 9/9 KILLED: `frost_rho` without the list B (`frosttool`, 2 FAIL lines); the challenge without head r (the L10 law, a `PATH_END` refusal of `append.lang`, and `frosttool` KAT c); the aggregator without the share check (`frosttool`, 2 FAIL lines); lambda over the indices 1 to 8, not the set S (`frosttool`, 7 FAIL lines); no negation for the key with the larger y (`frosttool`, 2 FAIL lines); `schnorrOk` without the z test (the L11 law); `append` with the `flagIf` branches swapped (the L10 law); the nonce without SEED (`frosttool`, 2 FAIL lines); the run entry without the tag (`run gate: 1 failures`). |
 | S8 | Wasm: lower the ported core to the IR, the crypto prelude, differential vectors. | DONE: `make -B check` EXIT 0; examples 57, parse refusals 19, check refusals 197, kit-only refusals 22, evals 245, proves 2, build refusals 5, ir 56 lowered and 1 refused (HOST-LIMIT), wasm 56 modules valid, wasm differential 81 rows with 0 mismatches, test/ir wasm 5 modules valid and 32 rows with 0 mismatches, guest differential 28, runs 7, run refusals 11, time hint 1, 11 interpreter regressions and 15 tool regressions passed (new: `wasm regressions`, on the vectors `test/wasm/hash.txt` and `test/wasm/secp.txt`, so the gate prints its line two times). Each count is at its target (`cairn-lang-work/S8-survey.md` section 4). The rises are the Wasm rows: check refusals 196 to 197 (`domain-name`, Q-S8-8), build refusals 1 to 5 (the "pending S8" row goes; the new rows are a run-time closure, a run-time tree, a TRANSP that does not reduce, the ZK op of `examples/zk.lang` and a build without `--kit`), and the new `ir`, `wasm` and `test/ir wasm` lines. `test/run-wasm.mjs` and `test/grid.awk` are gone (O13). Mutants 10/10 KILLED: `IR_OP_DIV` emits `i64.rem_u` (`wasm differential`, 2 FAIL lines); `natDiv` by 0 without the trap flag (row `ratio 7 0`); one round constant of the SHA-256 prelude (`wasm regressions`, hash 5 of 6 rows); one carry of the prelude field multiply dropped (secp 23 of 28 rows); the `FreeMon` tree refusal removed (`build test/ir/tree.lang`); the TRANSP refusal removed (`build test/ir/transp.lang`); the Flag argument guard removed (row `pick 2 4 9`); the U256 limb order swapped (4 FAIL lines, hash 4 of 6 rows, secp 18 of 33 rows); `keep_end` in `src/front/eval.c` (Q-S8-13); the point lift without the `y := p - y` select (secp row `sigOk` 1). |
-| S9 | ES module + JSON: port `js.c` and `json.c`, the BigInt prelude, `REFUSE_TARGET_SECRET`. | NEXT |
-| S10 | WGSL: port `wgsl.c`, batch proof check and chain rehash kernels. | |
+| S9 | ES module + JSON: port `js.c` and `json.c`, the BigInt prelude, `REFUSE_TARGET_SECRET`. | DONE: `make -B check` EXIT 0; examples 57, parse refusals 19, check refusals 197, kit-only refusals 22, evals 245, proves 2, build refusals 8, ir 56 lowered and 1 refused (HOST-LIMIT), wasm 56 modules valid, wasm differential 81 rows with 0 mismatches, js differential 81 rows with 0 mismatches (new), test/ir wasm 5 modules valid and 32 rows with 0 mismatches, test/ir js 32 rows with 0 mismatches (new), json abi 2 (new), guest differential 28, runs 7, run refusals 11, time hint 1, 11 interpreter regressions and 17 tool regressions passed (new: `js regressions`, on `test/wasm/hash.txt`, `test/wasm/secp.txt` and `test/wasm/traps.txt`, so the gate prints its line three times; `trap regressions` came with the USER S8 commit). Each count is at its target (`cairn-lang-work/S9-survey.md` section 4; Q-S9-6 (a), the same rows as Wasm). The rises are the JS rows and build refusals 5 to 8: two `REFUSE_TARGET_SECRET` rows (`test/ir/secret-key.lang`, `test/ir/secret-sign.lang`, O6) and the O26 row `test/ir/tree-elim.lang` (`REFUSE_RUNTIME_TREE`). `test/wasm/traps.txt` has 25 rows (24 at S8; the new row `endN0` kills J1). `src/js.c` reads the S8 IR (Q-S9-1 (a)). The JSON abi is in `src/main.c`, so there is no `json.c`; its kinds are `nat`, `flag` and `u256` (Q-S9-12 (a)), and `abi --text` keeps the Wasm layout. Mutants 12 KILLED, 1 EQUIVALENT, 0 LIVE: `secret_op()` gives `REFUSE_LOWER` (M1, both secret rows); `OP_ZK_KEY` in the public arm (M2, `secret-key`); no elim limit at the O26 site (M7, the `tree-elim` code and message); `family_result_of` gives 0 (O24, the `mk` and `pairOf` notes); no `OP_PROD` case in `family_result_of` (Q10, `pairOf`); the JS word add carry test `a + b > M64` to `>=` (J1, the new `traps.txt` row); `u256Add` without the overflow trap (J2, js traps); `point()` without the curve check (J3, js secp); the `liftX` root choice `neg < y` to `neg > y` (J4, js secp `sigOk`); SHA-256 `K[0]` + 1 on JS (J5, js hash and secp); `json_shape` of a U256 gives `nat` (JS, the JSON abi row); `print_wide` without `word_text` (JT, js hash, secp and traps). J6 (`wDiv` gives 0n at b = 0, not a trap) is EQUIVALENT: each IR div and mod divisor is `y + (y == 0)` or `n + (n == 0)` in `src/front/lower.c`, so b is never 0 (as `src/wasm.c` 988). |
+| S10 | WGSL: port `wgsl.c`, batch proof check and chain rehash kernels. | NEXT |
 | S11 | A1: canonical forms and `langc fmt`. | |
 | S12 | A2: `langc check --json`. | |
 | S13 | A4: `langc mcp`. | |
@@ -389,7 +393,14 @@ intent-lang.
 - O5 DONE (S4, Q-S4-6 (a)). The bLSAG domain tag is the bytes of "cairn"
   (`BLSAG_TAG` = 0x636169726e in `src/front/blsag.c`). The intent-lang tag
   was "orbit".
-- O6 `REFUSE_TARGET_SECRET` (S9) needs a sound mark of the secret values:
+- O6 DONE (S9, Q-S9-3 (a), Q-S9-9 (a)). `src/front/lower.c` refuses
+  `REFUSE_TARGET_SECRET` by op code (`secret_op()`) for `OP_ZK_KEY`,
+  `OP_ZK_SIGN`, `OP_ZK_WITNESS`, `OP_ZK_CAST` and `OP_ZK_PROVE` when the
+  operation is stuck at run time, on both targets (rows
+  `test/ir/secret-key.lang` and `test/ir/secret-sign.lang`). A closed
+  secret operation lowers to constants (O30, `docs/VALIDATION.md` row V8).
+  The S6 text:
+  (S6) `REFUSE_TARGET_SECRET` (S9) needs a sound mark of the secret values:
   the shares, the nonces and the decryption key. The plan said that S6
   marks them in the types. S6 did not: the DKG and the reshare are host
   C (`src/front/dkg.c`, Q-S6-4 (a)), so no guest type holds a share, a
@@ -523,16 +534,49 @@ intent-lang.
   the append committee signs, but it does not check an Auth. A `langc
   run` that checks a given Auth under `keyAppend` is open. No slice owns
   this gap yet.
-- O24 (S8) `langc ir` skips an entry whose result type is a family. It
+- O24 DONE (S9, Q-S9-8, Q-S9-10 (a)). The skip stays, but it has a name:
+  `langc ir` and `langc build` write one note on stderr for each def with
+  scalar parameters and a family, product or list result (`langc: note:
+  NAME: a family result has no target form (O24)`; `family_result_of` in
+  `src/front/check.c`). Sum, Option, Unit, Addr and function results get
+  no note. Gate rows: `examples/state-no-history.lang` (`mk`) and
+  `examples/functions.lang` (`pairOf`). The S8 text:
+  (S8) `langc ir` skips an entry whose result type is a family. It
   gives no function and no refusal. No slice owns this gap yet.
 - O25 (S8) Two lowering paths have no value row. `bin_case`: a direct
   fold into `Nat` has no `FreeMon` user, and the composition loop does not
   call it. The `cases_of` site of `family_fold`: no row has a run-time
   fold over a family with no recursive field. No slice owns this gap yet.
-- O26 (S8) The mutant M5 removes the `REFUSE_RUNTIME_TREE` of a run-time
+- O26 DONE (S9, Q-S9-11 (c)). The second `REFUSE_RUNTIME_TREE` (the elim
+  limit in `src/front/lower.c`, line 1306 at S8) has a row and a mutant:
+  `test/ir/tree-elim.lang`, a row over `Word`, not `FreeMon`, refuses
+  `REFUSE_RUNTIME_TREE`, and the gate checks the code and the message. The
+  mutant M7 (no elim limit) gives `REFUSE_RUNTIME_CLOSURE`, and the gate
+  kills it. The S8 text:
+  (S8) The mutant M5 removes the `REFUSE_RUNTIME_TREE` of a run-time
   constructor without a static leaf side (`src/front/lower.c:703`). The
   second `REFUSE_RUNTIME_TREE` (`src/front/lower.c:1306`, a fold over a
   tree) has no mutant. No slice owns this gap yet.
+- O27 (S9, Q-S9-5 (a)) The record as JSON. `langc run` prints the state
+  lines and the hash chain as text only. A JSON form of the record (for
+  example `langc run --json`) is open. No slice owns this gap yet.
+- O28 (S9, Q-S9-7 (a)) The note at `src/front/sigma.h:19` says that ctx
+  binds a proof to its context and that the bLSAG key image goes in ctx
+  (else a copied ballot verifies). The old note named S9 for this. S9 did
+  not do this, and the note now names this row. No slice owns this gap
+  yet.
+- O29 (S9, Q-S9-7 (a)) The note at `src/front/core.h:381` names "the
+  contract writer" as a user of `zk_index`. The old note said "(S9 B1)".
+  S9 added no contract writer, and the note now names this row. No slice
+  owns this gap yet.
+- O30 (S9, Q-S9-9 (a)) O6 refuses a secret operation that is stuck at run
+  time. A closed secret operation lowers to constants: `def k0 : U256 :=
+  zkKey 0` lowers to a function that returns the 4 key words, and a closed
+  `zkSign` or `zkProve` result does the same. This is safe because the
+  guest secret operations give test keys only (a test key is hash(tag, i)
+  mod n, so it is public). A real key never enters the guest
+  (`docs/VALIDATION.md`, row V8). A slice that lets a real key into the
+  guest must first add a taint mark to the evaluator.
 
 ## 11. Questions for the USER (S0)
 

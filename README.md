@@ -11,6 +11,10 @@ rules. There is no clock: time is the number of operations applied.
 - Type constructors: only cell monads and their duals, in Cubical TT.
 - Host: TinyCC. `build/langc` is C99.
 - Targets: Wasm MVP (primary), ES module + JSON, WGSL compute.
+- `langc build PROG -o OUT.wasm` writes Wasm, `langc build PROG --js
+  OUT.mjs` writes an ES module, and `langc abi PROG` prints the JSON abi
+  (`--text` prints the Wasm layout). `build/jstool` runs an ES module on
+  node.
 
 Status: S0 seed. The kernel, the domain and the targets come in the
 slices of `docs/PLAN.md`. A table that tells when to use cairn-lang comes

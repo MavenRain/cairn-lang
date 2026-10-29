@@ -16,7 +16,7 @@
    Each challenge e is the raw chain of thr_hash (the guest `hash a b`) from
    a tag over ctx and the statement, not reduced: ecMul by a raw word is
    ecMul by the word mod n, as the order n is prime. ctx binds a proof to its
-   context (S9: the bLSAG key image; else a copied ballot verifies). The
+   context (PLAN O28: the bLSAG key image; else a copied ballot verifies). The
    nonces come from the secret r and the statement, never from public data:
    a public nonce gives r, thus the vote (the S6 review lesson). */
 #ifndef LANG_FRONT_SIGMA_H

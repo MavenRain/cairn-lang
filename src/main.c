@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "front/check.h"
+#include "js.h"
 #include "front/front.h"
 #include "front/lower.h"
 #include "target.h"
@@ -29,6 +30,7 @@ typedef struct {
   int arg_count;
   const char *script_path;
   const char *out_path;
+  int js; /* --js OUT: the ES module in place of the target (S9 B2) */
   int runtime;
   int json;
   CheckMode mode; /* orbit-lang S3: --kit selects the kit mode */
@@ -53,7 +55,7 @@ static int usage(FILE *err) {
         "       langc [--kit] run PROG SCRIPT\n"
         "       langc [--kit] ir PROG\n"
         "       langc [--kit] abi PROG [--text]\n"
-        "       langc [--kit] build PROG -o OUT [--runtime]\n"
+        "       langc [--kit] build PROG (-o OUT | --js OUT.mjs) [--runtime]\n"
         "       langc [--kit] prove PROG NAME [POLL]\n"
         "--kit: the kit mode, the trusted test scope of the kit gate\n", err);
   return 2;
@@ -70,16 +72,19 @@ static int find_command(const char *word, Command *out) {
 }
 
 static int parse_build_options(int argc, char **argv, Options *opt, Diag *diag) {
+  opt->js = 0;
   for (int i = 3; i < argc; i++) {
-    int is_out = strcmp(argv[i], "-o") == 0 && i + 1 < argc;
+    int is_js = strcmp(argv[i], "--js") == 0;
+    int is_out = (strcmp(argv[i], "-o") == 0 || is_js) && i + 1 < argc;
     int is_runtime = strcmp(argv[i], "--runtime") == 0;
     if (!is_out && !is_runtime) return diag_fail(diag, "USAGE", NULL, "unknown build argument '%s'", argv[i]);
     opt->out_path = is_out ? argv[i + 1] : opt->out_path;
+    opt->js = is_out ? is_js : opt->js;
     opt->runtime |= is_runtime;
     i += is_out;
   }
   /* Q-S8-8: build writes a file, so -o OUT is required. */
-  return opt->out_path != NULL ? 1 : diag_fail(diag, "USAGE", NULL, "build needs -o OUT");
+  return opt->out_path != NULL ? 1 : diag_fail(diag, "USAGE", NULL, "build needs -o OUT or --js OUT");
 }
 
 static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
@@ -148,16 +153,59 @@ static const char *command_word(Command command) {
   return "?";
 }
 
+/* One character of a JSON string. */
+static void json_char(unsigned char c, FILE *out) {
+  switch (c) {
+    case '"':
+    case '\\':
+      fprintf(out, "\\%c", c);
+      return;
+    default:
+      if (c < 0x20)
+        fprintf(out, "\\u%04x", (unsigned)c);
+      else
+        fputc(c, out);
+      return;
+  }
+}
+
+/* The JSON abi (Q-S9-5): the kind of a scalar, without the Wasm layout. */
+static const char *json_shape(IrScalar sc) {
+  switch (sc) {
+    case IR_SCALAR_NAT:
+      return "nat";
+    case IR_SCALAR_FLAG:
+      return "flag";
+    case IR_SCALAR_U256:
+      return "u256";
+  }
+  return "?";
+}
+
+/* Entry FN as a JSON object, after a comma unless FIRST. Returns 1. */
+static int json_abi_entry(const IrFunc *fn, int first, FILE *out) {
+  const unsigned char *c;
+  size_t k;
+  fputs(first ? "{\"name\":\"" : ",{\"name\":\"", out);
+  for (c = (const unsigned char *)fn->name; *c != '\0'; c++) json_char(*c, out);
+  fputs("\",\"params\":[", out);
+  for (k = 0; k < fn->param_count; k++) fprintf(out, "%s\"%s\"", k == 0 ? "" : ",", json_shape(fn->params[k]));
+  fprintf(out, "],\"result\":\"%s\"}", json_shape(fn->result));
+  return 1;
+}
+
 /* The ABI comes from checked types, independently of lowering. An omitted
    IR function must not disappear from both sides of the gate's count check. */
-static int print_abi(Machine *machine) {
+static int print_abi(Machine *machine, int json) {
   uint32_t i;
   uint32_t k;
+  uint32_t count = 0;
   Entry entry;
   IrFunc fn;
   IrScalar params[ENTRY_PARAMS_MAX];
   memset(&fn, 0, sizeof fn);
   fn.params = params;
+  if (json) fputs("{\"entries\":[", stdout);
   for (i = 0; i < machine->def_count; i++) {
     machine->fuel = EVAL_FUEL_STEPS;
     if (machine->defs[i].origin != ORIGIN_PROGRAM || !entry_of(machine, machine->defs[i].type, &entry))
@@ -167,9 +215,10 @@ static int print_abi(Machine *machine) {
     for (k = 0; k < entry.param_count; k++)
       params[k] = entry.param_flag[k] ? IR_SCALAR_FLAG : entry.param_u256[k] ? IR_SCALAR_U256 : IR_SCALAR_NAT;
     fn.result = entry.result_flag ? IR_SCALAR_FLAG : entry.result_u256 ? IR_SCALAR_U256 : IR_SCALAR_NAT;
-    if (!target_abi_line(&fn, stdout, stderr))
+    if (!(json ? json_abi_entry(&fn, count++ == 0, stdout) : target_abi_line(&fn, stdout, stderr)))
       return 1;
   }
+  if (json) fputs("]}\n", stdout);
   return machine->diag->set ? 1 : 0;
 }
 
@@ -178,7 +227,7 @@ static int run_target(const Options *opt, Machine *machine, Diag *diag) {
   IrProgram prog;
   FILE *out;
   int ok = 1;
-  if (opt->command == CMD_ABI) return print_abi(machine);
+  if (opt->command == CMD_ABI) return print_abi(machine, opt->json);
   if (!lower_program(machine, &prog)) return 1;
   switch (opt->command) {
     case CMD_IR:
@@ -194,7 +243,8 @@ static int run_target(const Options *opt, Machine *machine, Diag *diag) {
   }
   out = fopen(opt->out_path, "wb");
   if (out == NULL) return diag_fail(diag, "IO", NULL, "cannot write '%s'", opt->out_path) + 2;
-  ok = target_write(&prog, opt->runtime ? TARGET_PART_RUNTIME : TARGET_PART_MAIN, out, stderr);
+  ok = opt->js ? js_write(&prog, out, stderr)
+               : target_write(&prog, opt->runtime ? TARGET_PART_RUNTIME : TARGET_PART_MAIN, out, stderr);
   ok = fclose(out) == 0 && ok;
   if (ok) return 0;
   remove(opt->out_path);
@@ -226,14 +276,11 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
       signal(SIGPIPE, SIG_IGN);
       return prove_command(&machine, opt->entry, opt->arg_count == 1 ? opt->args[0] : NULL, stdout, stderr);
     case CMD_ABI:
-      /* Q-S8-8: the JSON abi (the default) is planned for S9; --text works. */
-      if (!opt->json) return run_target(opt, &machine, diag);
-      break;
     case CMD_IR:
     case CMD_BUILD:
       return run_target(opt, &machine, diag);
   }
-  diag_fail(diag, "PLANNED", NULL, "the JSON %s is not built yet (pending S9): use --text", command_word(opt->command));
+  diag_fail(diag, "INTERNAL", NULL, "no handler for the %s command", command_word(opt->command));
   return 1;
 }
 

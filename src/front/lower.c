@@ -10,6 +10,7 @@
    node. The chain is a list: a block [1, word, flag, rest, 0]. */
 #include "front/lower.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "front/check.h"
@@ -707,6 +708,13 @@ static int lower_ctor(Low *l, Buf *b, const Value *v, Operand *out) {
 /* An operation with no form on the target (cairn-lang S8, Q-S8-1, Q-S8-5). */
 static int refuse(Low *l, const char *what) {
   return diag_fail(l->m->diag, "REFUSE_LOWER", l->m->def, "%s does not lower (HOST-LIMIT)", what);
+}
+
+/* An operation on a secret key or a witness (the zk key, sign, witness, cast
+   and prove operations) has no form on any target: a module is public
+   (cairn-lang S9, Q-S9-3, PLAN O6). */
+static int secret_op(Low *l) {
+  return diag_fail(l->m->diag, "REFUSE_TARGET_SECRET", l->m->def, "the operation touches a secret key or a witness (O6)");
 }
 
 /* The prelude function CALL applied to the N words of ARGS. */
@@ -1775,15 +1783,16 @@ static int lower_stuck(Low *l, Buf *b, const Value *v, Operand *out) {
   case OP_KMAP_GET:
   case OP_KMAP_SET:
     return refuse(l, "a run-time map (KMap)");
-  case OP_ZK_HP:
   case OP_ZK_KEY:
-  case OP_ZK_DIGEST:
   case OP_ZK_SIGN:
-  case OP_ZK_VERIFY:
-  case OP_ZK_BALLOT:
   case OP_ZK_WITNESS:
   case OP_ZK_CAST:
   case OP_ZK_PROVE:
+    return secret_op(l);
+  case OP_ZK_HP:
+  case OP_ZK_DIGEST:
+  case OP_ZK_VERIFY:
+  case OP_ZK_BALLOT:
   case OP_ZK_PROJECT:
   case OP_ZK_CHECK:
     return refuse(l, "a host proof check (zk)");
@@ -1901,6 +1910,8 @@ int lower_program(Machine *m, IrProgram *prog) {
   for (i = 0; i < m->def_count; i++) {
     m->fuel = EVAL_FUEL_STEPS;
     entry = m->defs[i].origin == ORIGIN_PROGRAM && entry_of(m, m->defs[i].type, &e);
+    if (!entry && m->defs[i].origin == ORIGIN_PROGRAM && family_result_of(m, m->defs[i].type))
+      fprintf(stderr, "langc: note: %s: a family result has no target form (O24)\n", m->defs[i].name);
     if (entry && !lower_entry(m, i, &e, &funcs[n]))
       return 0;
     n += entry ? 1u : 0u;

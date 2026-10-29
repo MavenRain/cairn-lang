@@ -51,7 +51,10 @@ stay in PLAN section 5.
 |---|---|---|
 | V5 | S6, Q-S0-7 (a), Q-S6-8 (a) | The Pedersen DKG lets a member bias the distribution of the public key (Gennaro, Jarecki, Krawczyk, Rabin). The security of ElGamal and of the threshold Schnorr signature under that bias is an assumption (PLAN section 5, row V5). |
 | V6 | S8, Q-S8-9 (a) | The Wasm runner (wasmtime 48.0.1, the C API that `test/wasmtool.c` links) runs a module as the Wasm MVP specification says, and `wasm-validate` (wabt 1.0.40) accepts only a valid module. The `wasm differential` and `wasm regressions` rows hold only under this assumption. |
-| V7 | S8, Q-S8-9 (a) | The Wasm prelude uses the algorithms of `secp256k1.c`. Nobody checks the prelude for constant time. O6 (S9) owns secret data on a target. |
+| V7 | S8, Q-S8-9 (a) | The Wasm prelude uses the algorithms of `secp256k1.c`. Nobody checks the prelude for constant time. The JS prelude of `src/js.c` uses BigInt and is not constant time either. No secret value reaches a target: O6 (S9) refuses a secret operation that is stuck at run time, and V8 holds. |
+| V8 | S9, Q-S9-9 (a) | The guest secret operations (`zkKey`, `zkSign` and the other three of O6) give test keys only. A test key is hash(tag, i) mod n, so it is public. A real key never enters the guest: the DKG shares, the nonces and the decryption key stay in the host C code. The build refuses a secret operation that is stuck at run time (O6). A closed secret operation lowers to constants (PLAN O30). |
+| V9 | S9, Q-S9-2 (a) | The JS runner (node v23.10.0, which `test/jstool.c` runs through `popen` with a heap cap of 2048 MiB) runs the ES module of `langc build PROG --js OUT.mjs` as the ECMAScript specification says, with exact BigInt arithmetic. The `js differential`, `test/ir js` and `js regressions` rows hold only under this assumption. |
+| V10 | S9, Q-S9-13 (a) | The ES module and the Wasm module give the same result only below the heap limit. The Wasm `fe_mul` takes a 64-byte scratch block for each call and the JS `feMul` does not, so a long curve run can trap on Wasm at `HEAP_WORDS` where JS gives a value, and node can stop first at its heap cap (`build/jstool` exit 2). No gate row reaches the limit. |
 
 `src/front/dkg.c` deals and reshares the keys `keyOpen` and `keyAppend`:
 a Pedersen DKG with Feldman commitments and a Schnorr proof for each dealt

@@ -169,12 +169,19 @@ what the domain holds and how to change it.
 | `parse refusals: 19 checked` | each `test/parse` file fails with the code in `test/parse/expect.txt`; one file has 1100 nested parentheses |
 | `check refusals: 197 checked` | each `test/check` mutant fails with the code in `test/check/expect.txt`; the `TYPE_REFL` message shows both normal forms |
 | `evals: 245 checked` | `langc eval` gives each result in `test/eval/expect.txt` |
-| `build refusals: 5 checked` | `langc build examples/dao.lang -o OUT` exits 0, writes nothing on stdout and writes a valid module; each refused build exits 1 with its code and writes nothing on stdout; the rows include the transp row (`test/ir/transp.lang`, `REFUSE_LOWER`) and a guest-mode `REFUSE_KIT` row |
+| `build refusals: 8 checked` | `langc build examples/dao.lang -o OUT` exits 0, writes nothing on stdout and writes a valid module; each refused build exits 1 with its code and writes nothing on stdout; the rows include the transp row (`test/ir/transp.lang`, `REFUSE_LOWER`), two `REFUSE_TARGET_SECRET` rows (`test/ir/secret-key.lang`, `test/ir/secret-sign.lang`, O6), the elim row (`test/ir/tree-elim.lang`, `REFUSE_RUNTIME_TREE`, O26) and a guest-mode `REFUSE_KIT` row |
 | `ir: 56 lowered, 1 refused (HOST-LIMIT)` | `langc ir` lowers each example, with one `func` for each `abi --text` line derived independently from checked types; an example that does not lower refuses `REFUSE_LOWER` with a `HOST-LIMIT` detail |
 | `wasm: 56 modules valid` | `langc build` writes a module for each lowered example, and `wasm-validate` and `wasm-objdump -x` accept it |
 | `wasm differential: 81 rows, 0 mismatches` | `build/wasmtool` (`test/wasmtool.c`, on the wasmtime C API) runs each `test/eval/expect.txt` row whose name is an entry of its file; each result is equal to the row result, and a trap is equal to a trap |
+| `js differential: 81 rows, 0 mismatches` | `langc build PROG --js OUT.mjs` writes an ES module for each lowered example, and `build/jstool` (`test/jstool.c`, node through `popen`) runs the rows of the `wasm differential` line; each result is equal to the row result, and a trap is equal to a trap |
 | `test/ir wasm: 5 modules valid, 32 rows, 0 mismatches` | each `test/ir` module builds in `--kit` mode and is valid, and each row of the gate list gives the same result on `build/wasmtool` and in `langc --kit eval` |
+| `test/ir js: 32 rows, 0 mismatches` | each row of the `test/ir` gate list gives the same result on `build/jstool` and in `langc --kit eval` |
+| `json abi: 2 checked` | `langc --kit abi test/wasm/secp.lang` prints the JSON abi line (each kind is `nat`, `flag` or `u256`), and `abi` with a flag other than `--text` refuses `USAGE` |
 | `gate: 0 failures` | the sum of all failures |
+
+`make check` also runs `test/jstest.c` against an ES module with entries
+named `default`, `a'` and `then`, loaded from a path containing a space,
+`#`, `?` and `%`. It repeats the calls with an apostrophe in `TMPDIR`.
 
 The gate also checks the usage and IO exit codes, five `eval` refusals,
 `test/ir/closure.lang` (`REFUSE_RUNTIME_CLOSURE`), `test/ir/tree.lang`
@@ -186,8 +193,10 @@ reaches the result: the 4 entries of `test/ir/proof-trap.lang` trap at
 18446744073709551615 on Wasm. `perl bin/doc-check.pl hosts/tcc-wasm` must report 0
 problems.
 
-`make check` also compares the 24 fixed rows in `test/wasm/traps.txt`
-against the evaluator and Wasm. They cover neutral path endpoints,
+`make check` also compares the 25 fixed rows in `test/wasm/traps.txt`
+against the evaluator, Wasm and the ES module, and the rows of
+`test/wasm/hash.txt` and `test/wasm/secp.txt` against Wasm and the ES
+module. They cover neutral path endpoints,
 trapped curve coordinates, and unused invalid curve results. It checks
 that `abi --text` still reports checked signatures when lowering refuses
 `test/ir/transp.lang`.

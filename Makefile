@@ -1,12 +1,13 @@
 # Builds the cairn-lang kernel port (the intent-lang kernel at 67445ae) on the
 # tcc-wasm host with TinyCC. See README.md. TARGET (src/front/lower.c and
-# src/wasm.c, on src/ir.h) is the Wasm target (S8); the tools leave it out.
+# src/wasm.c, on src/ir.h) is the Wasm target (S8), and src/js.c the JS
+# writer (S9); the tools leave it out.
 TCC ?= tcc
 CC ?= cc
 CFLAGS = -std=c99 -Wall -Werror -Isrc
 CLANG_FLAGS = -std=c99 -Wall -Wextra -Wswitch-enum -Werror -fsyntax-only -Isrc
 FRONT = src/front/base.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/frost.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/eval.c src/front/check.c src/sha256.c
-TARGET = src/front/lower.c src/wasm.c
+TARGET = src/front/lower.c src/wasm.c src/js.c
 SRC = src/main.c $(FRONT) $(TARGET)
 FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c,$(FRONT))
 BLSAG_TOOL = test/blsagtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/sha256.c
@@ -22,6 +23,7 @@ SHA_TOOL = test/shatool.c src/sha256.c
 # build of build/wasmtool, so the gate fails; nothing is downloaded.
 WASMTIME ?= /opt/homebrew
 WASM_TOOL = test/wasmtool.c src/front/u256.c
+JS_TOOL = test/jstool.c src/front/u256.c
 WASMTIME_FILES = $(WASMTIME)/include/wasmtime.h $(WASMTIME)/lib/libwasmtime.dylib
 PATH_TOOL = test/pathtool.c $(filter-out src/front/front.c,$(FRONT))
 RUN_TOOL = test/runtool.c $(FRONT)
@@ -29,7 +31,7 @@ HEADERS = $(wildcard src/*.h src/front/*.h)
 
 .PHONY: build check check-clang clean
 
-build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool
+build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool
 
 build/domain.c: domain/domain.lang gen/embed.c
 	mkdir -p build
@@ -89,6 +91,14 @@ build/wasmtool: $(WASM_TOOL) $(HEADERS) $(WASMTIME_FILES)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -I$(WASMTIME)/include -o build/wasmtool $(WASM_TOOL) $(WASMTIME)/lib/libwasmtime.dylib
 
+build/jstool: $(JS_TOOL) $(HEADERS)
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/jstool $(JS_TOOL)
+
+build/jstest: test/jstest.c
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/jstest test/jstest.c
+
 check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(SRC) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(FRONT_TOOL)
@@ -104,8 +114,10 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(PATH_TOOL)
 	$(CC) $(CLANG_FLAGS) $(RUN_TOOL) build/domain.c
 	$(CC) $(CLANG_FLAGS) -isystem $(WASMTIME)/include $(WASM_TOOL)
+	$(CC) $(CLANG_FLAGS) $(JS_TOOL)
+	$(CC) $(CLANG_FLAGS) test/jstest.c
 
-check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool check-clang
+check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/jstest check-clang
 	sh test/gate.sh
 	sh test/run.sh
 	sh test/review.sh
@@ -135,6 +147,18 @@ check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thres
 	awk -F ' => ' '/^[^#]/ {print $$2}' test/wasm/traps.txt | cmp -s - build/wasm-traps.out || { echo "FAIL trap regressions: Wasm output differs"; exit 1; }
 	awk -F ' => ' '/^[^#]/ {print $$1}' test/wasm/traps.txt | while IFS= read -r line; do set -- $$line; build/langc --kit eval test/wasm/traps.lang "$$@" 2>/dev/null || :; done > build/eval-traps.out
 	awk -F ' => ' '/^[^#]/ {print $$2}' test/wasm/traps.txt | cmp -s - build/eval-traps.out && echo "trap regressions: passed" || { echo "FAIL trap regressions: evaluator output differs"; exit 1; }
+	build/langc --kit build test/wasm/hash.lang --js build/js-hash.mjs
+	awk -F ' => ' '/^[^#]/ {print $$1}' test/wasm/hash.txt | build/jstool build/js-hash.mjs build/wasm-hash.abi > build/js-hash.out
+	awk -F ' => ' '/^[^#]/ {print $$2}' test/wasm/hash.txt | cmp -s - build/js-hash.out && echo "js regressions: passed" || { echo "FAIL js regressions: build/js-hash.out is not the RESULT text of test/wasm/hash.txt"; exit 1; }
+	build/langc --kit build test/wasm/secp.lang --js build/js-secp.mjs
+	awk -F ' => ' '/^[^#]/ {print $$1}' test/wasm/secp.txt | build/jstool build/js-secp.mjs build/wasm-secp.abi > build/js-secp.out
+	awk -F ' => ' '/^[^#]/ {print $$2}' test/wasm/secp.txt | cmp -s - build/js-secp.out && echo "js regressions: passed" || { echo "FAIL js regressions: build/js-secp.out is not the RESULT text of test/wasm/secp.txt"; exit 1; }
+	build/langc --kit build test/wasm/traps.lang --js build/js-traps.mjs
+	awk -F ' => ' '/^[^#]/ {print $$1}' test/wasm/traps.txt | build/jstool build/js-traps.mjs build/wasm-traps.abi > build/js-traps.out
+	awk -F ' => ' '/^[^#]/ {print $$2}' test/wasm/traps.txt | cmp -s - build/js-traps.out && echo "js regressions: passed" || { echo "FAIL js regressions: build/js-traps.out is not the RESULT text of test/wasm/traps.txt"; exit 1; }
+	build/langc --kit build test/js/names.lang --js 'build/js-names #?%.mjs'
+	build/langc --kit abi test/js/names.lang --text > build/js-names.abi
+	build/jstest
 	build/langc --kit abi test/ir/transp.lang --text > build/transp.abi
 	printf 'moved (nat) -> nat\n' | cmp -s - build/transp.abi || { echo "FAIL ABI: checked signatures must be available independently of lowering"; exit 1; }
 
