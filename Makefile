@@ -7,7 +7,7 @@ CC ?= cc
 CFLAGS = -std=c99 -Wall -Werror -Isrc
 CLANG_FLAGS = -std=c99 -Wall -Wextra -Wswitch-enum -Werror -fsyntax-only -Isrc
 FRONT = src/front/base.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/frost.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/eval.c src/front/check.c src/sha256.c
-TARGET = src/front/lower.c src/wasm.c src/js.c
+TARGET = src/front/lower.c src/wasm.c src/js.c src/wgsl.c
 SRC = src/main.c $(FRONT) $(TARGET)
 FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c,$(FRONT))
 BLSAG_TOOL = test/blsagtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/sha256.c
@@ -24,14 +24,15 @@ SHA_TOOL = test/shatool.c src/sha256.c
 WASMTIME ?= /opt/homebrew
 WASM_TOOL = test/wasmtool.c src/front/u256.c
 JS_TOOL = test/jstool.c src/front/u256.c
+WGSL_TOOL = test/wgsltool.c src/front/u256.c
 WASMTIME_FILES = $(WASMTIME)/include/wasmtime.h $(WASMTIME)/lib/libwasmtime.dylib
 PATH_TOOL = test/pathtool.c $(filter-out src/front/front.c,$(FRONT))
 RUN_TOOL = test/runtool.c $(FRONT)
 HEADERS = $(wildcard src/*.h src/front/*.h)
 
-.PHONY: build check check-clang clean
+.PHONY: build check check-clang clean gpu-check
 
-build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool
+build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool
 
 build/domain.c: domain/domain.lang gen/embed.c
 	mkdir -p build
@@ -95,6 +96,10 @@ build/jstool: $(JS_TOOL) $(HEADERS)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/jstool $(JS_TOOL)
 
+build/wgsltool: $(WGSL_TOOL) $(HEADERS)
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/wgsltool $(WGSL_TOOL)
+
 build/jstest: test/jstest.c
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/jstest test/jstest.c
@@ -115,9 +120,10 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(RUN_TOOL) build/domain.c
 	$(CC) $(CLANG_FLAGS) -isystem $(WASMTIME)/include $(WASM_TOOL)
 	$(CC) $(CLANG_FLAGS) $(JS_TOOL)
+	$(CC) $(CLANG_FLAGS) $(WGSL_TOOL)
 	$(CC) $(CLANG_FLAGS) test/jstest.c
 
-check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/jstest check-clang
+check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/jstest check-clang
 	sh test/gate.sh
 	sh test/run.sh
 	sh test/review.sh
@@ -164,3 +170,8 @@ check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thres
 
 clean:
 	rm -rf build
+
+# S10: the WebGPU rows of test/gate.sh. Run it outside the sandbox (deno needs
+# a GPU adapter).
+gpu-check: build build/jstest check-clang
+	sh test/gate.sh gpu

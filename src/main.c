@@ -6,6 +6,7 @@
 
 #include "front/check.h"
 #include "js.h"
+#include "wgsl.h"
 #include "front/front.h"
 #include "front/lower.h"
 #include "target.h"
@@ -31,6 +32,7 @@ typedef struct {
   const char *script_path;
   const char *out_path;
   int js; /* --js OUT: the ES module in place of the target (S9 B2) */
+  int wgsl; /* --wgsl OUT: the WGSL compute module in place of the target (S10 B2) */
   int runtime;
   int json;
   CheckMode mode; /* orbit-lang S3: --kit selects the kit mode */
@@ -55,7 +57,7 @@ static int usage(FILE *err) {
         "       langc [--kit] run PROG SCRIPT\n"
         "       langc [--kit] ir PROG\n"
         "       langc [--kit] abi PROG [--text]\n"
-        "       langc [--kit] build PROG (-o OUT | --js OUT.mjs) [--runtime]\n"
+        "       langc [--kit] build PROG (-o OUT | --js OUT.mjs | --wgsl OUT.wgsl) [--runtime]\n"
         "       langc [--kit] prove PROG NAME [POLL]\n"
         "--kit: the kit mode, the trusted test scope of the kit gate\n", err);
   return 2;
@@ -72,19 +74,26 @@ static int find_command(const char *word, Command *out) {
 }
 
 static int parse_build_options(int argc, char **argv, Options *opt, Diag *diag) {
+  int outs = 0;
   opt->js = 0;
+  opt->wgsl = 0;
   for (int i = 3; i < argc; i++) {
     int is_js = strcmp(argv[i], "--js") == 0;
-    int is_out = (strcmp(argv[i], "-o") == 0 || is_js) && i + 1 < argc;
+    int is_wgsl = strcmp(argv[i], "--wgsl") == 0;
+    int is_out = (strcmp(argv[i], "-o") == 0 || is_js || is_wgsl) && i + 1 < argc;
     int is_runtime = strcmp(argv[i], "--runtime") == 0;
     if (!is_out && !is_runtime) return diag_fail(diag, "USAGE", NULL, "unknown build argument '%s'", argv[i]);
     opt->out_path = is_out ? argv[i + 1] : opt->out_path;
     opt->js = is_out ? is_js : opt->js;
+    opt->wgsl = is_out ? is_wgsl : opt->wgsl;
+    outs += is_out;
     opt->runtime |= is_runtime;
     i += is_out;
   }
-  /* Q-S8-8: build writes a file, so -o OUT is required. */
-  return opt->out_path != NULL ? 1 : diag_fail(diag, "USAGE", NULL, "build needs -o OUT or --js OUT");
+  /* Q-S8-8: build writes a file, so -o OUT is required. S10 B2: build writes
+     one file, so it takes one output flag only. */
+  if (outs > 1) return diag_fail(diag, "USAGE", NULL, "build takes one of -o OUT, --js OUT and --wgsl OUT");
+  return opt->out_path != NULL ? 1 : diag_fail(diag, "USAGE", NULL, "build needs -o OUT, --js OUT or --wgsl OUT");
 }
 
 static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
@@ -243,8 +252,9 @@ static int run_target(const Options *opt, Machine *machine, Diag *diag) {
   }
   out = fopen(opt->out_path, "wb");
   if (out == NULL) return diag_fail(diag, "IO", NULL, "cannot write '%s'", opt->out_path) + 2;
-  ok = opt->js ? js_write(&prog, out, stderr)
-               : target_write(&prog, opt->runtime ? TARGET_PART_RUNTIME : TARGET_PART_MAIN, out, stderr);
+  ok = opt->wgsl ? wgsl_write(&prog, out, stderr)
+       : opt->js ? js_write(&prog, out, stderr)
+                 : target_write(&prog, opt->runtime ? TARGET_PART_RUNTIME : TARGET_PART_MAIN, out, stderr);
   ok = fclose(out) == 0 && ok;
   if (ok) return 0;
   remove(opt->out_path);

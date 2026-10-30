@@ -3,6 +3,8 @@
 set -eu
 fail=0
 count=0
+# `sh test/gate.sh gpu` adds the WebGPU rows (S10, make gpu-check).
+gpu=${1:-}
 # kit LIST FILE prints --kit when FILE is a line of LIST. A row whose text uses a
 # kit name or a Nat or word literal is a kit row (orbit-lang S3); the others run
 # in guest mode.
@@ -172,8 +174,9 @@ build_refused() {
   flags=$1
   code=$2
   file=$3
+  oflag=${4:--o}
   status=0
-  build/langc $flags build "$file" -o "$tmp/refused.wasm" >"$tmp/out" 2>"$tmp/err" || status=$?
+  build/langc $flags build "$file" $oflag "$tmp/refused.out" >"$tmp/out" 2>"$tmp/err" || status=$?
   builds=$((builds + 1))
   case "$status:$(head -n 1 "$tmp/err"):$(wc -c <"$tmp/out" | tr -d ' ')" in
     "1:langc: $code: "*":0") ;;
@@ -186,6 +189,8 @@ build_refused --kit REFUSE_LOWER examples/zk.lang
 build_refused --kit REFUSE_LOWER test/ir/transp.lang
 build_refused --kit REFUSE_TARGET_SECRET test/ir/secret-key.lang
 build_refused --kit REFUSE_TARGET_SECRET test/ir/secret-sign.lang
+# S10: the WGSL module refuses the secret ops too.
+build_refused --kit REFUSE_TARGET_SECRET test/ir/secret-key.lang --wgsl
 build_refused "" REFUSE_KIT test/ir/comb.lang
 build_refused --kit REFUSE_RUNTIME_TREE test/ir/tree-elim.lang
 # O26 (Q-S9-11): the elim limit of family_fold refuses, not the closure
@@ -220,6 +225,7 @@ echo "build refusals: $builds checked"
 irs=0
 host_limits=0
 wasms=0
+wgsls=0
 for f in examples/*.lang; do
   k=$(kit examples/kit.txt "${f#examples/}")
   status=0
@@ -241,9 +247,37 @@ for f in examples/*.lang; do
     continue
   fi
   wasms=$((wasms + 1))
+  # S10: the module builds with --wgsl too: exit 0, no stdout, a module file.
+  g="$tmp/$(basename "$f" .lang).wgsl"
+  status=0
+  build/langc $k build "$f" --wgsl "$g" >"$tmp/out" 2>"$tmp/g.err" || status=$?
+  if [ "$status:$(wc -c <"$tmp/out" | tr -d ' ')" != 0:0 ] || [ ! -s "$g" ]; then
+    echo "FAIL wgsl $f: want exit 0, no stdout and a module, got exit $status: $(head -n 1 "$tmp/g.err")"
+    fail=$((fail + 1))
+    continue
+  fi
+  wgsls=$((wgsls + 1))
 done
 echo "ir: $irs lowered, $host_limits refused (HOST-LIMIT)"
 echo "wasm: $wasms modules valid"
+echo "wgsl: $wgsls modules written"
+# S10: the --wgsl usage rows of src/main.c: build takes one output flag, and
+# --wgsl needs a path.
+wgsl_refused=0
+wgsl_usage() {
+  msg=$1
+  shift
+  status=0
+  build/langc --kit build test/ir/comb.lang "$@" >"$tmp/out" 2>"$tmp/err" || status=$?
+  wgsl_refused=$((wgsl_refused + 1))
+  case "$status:$(head -n 1 "$tmp/err"):$(wc -c <"$tmp/out" | tr -d ' ')" in
+    "2:langc: USAGE: -: $msg:0") ;;
+    *) echo "FAIL build $*: want exit 2 and USAGE, got exit $status: $(head -n 1 "$tmp/err")"; fail=$((fail + 1)) ;;
+  esac
+}
+wgsl_usage "build takes one of -o OUT, --js OUT and --wgsl OUT" --wgsl "$tmp/a.wgsl" --js "$tmp/a.mjs"
+wgsl_usage "unknown build argument '--wgsl'" --wgsl
+echo "wgsl refusals: $wgsl_refused checked"
 
 # The Wasm differential (Q-S8-7): each test/eval/expect.txt row whose NAME is an
 # entry of FILE (a line of its `abi --text`) runs on the module in
@@ -406,6 +440,138 @@ for m in comb lazy spine proof-trap memname; do
   [ "$bad" -eq 0 ] || { echo "FAIL test/ir js $m: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
 done
 echo "test/ir js: $ir_js_rows rows, $ir_js_bad mismatches"
+
+# S10: `sh test/gate.sh gpu` (make gpu-check, outside the sandbox: deno needs a
+# GPU adapter) runs the WGSL modules in build/wgsltool. make check skips them.
+if [ "$gpu" = gpu ]; then
+  # Each module of the ir and wasm loop compiles, with one compute pipeline for
+  # each entry. A module with no entry prints `valid 0 entries`.
+  # Ruling Q-S10-r13: each line of test/wgsl/internal.txt is `MODULE ENTRY`, an
+  # entry whose pipeline gives GPUInternalError (a Metal backend compile limit).
+  # A listed module is known when its error lines are its listed entries and it
+  # has no other line. A new error or a listed entry that compiles is a FAIL.
+  wgsl_valid=0
+  known_mods=0
+  known_entries=0
+  for f in examples/*.lang; do
+    g="$tmp/$(basename "$f" .lang).wgsl"
+    [ -f "$g" ] || continue
+    awk -v f="$f" '$1 == f {print $2}' test/wgsl/internal.txt | sort >"$tmp/want.txt"
+    if build/wgsltool --valid "$g" >"$tmp/v.out" 2>"$tmp/w.err" && rg -q -x 'valid [0-9]+ entries' "$tmp/v.out"; then
+      if [ -s "$tmp/want.txt" ]; then
+        echo "FAIL wgsl known $f: valid, but listed"
+        fail=$((fail + 1))
+      else
+        wgsl_valid=$((wgsl_valid + 1))
+      fi
+    else
+      { rg -o -r '$1' -x 'error (\w+) pipeline GPUInternalError' "$tmp/v.out" || true; } | sort >"$tmp/got.txt"
+      other=$(rg -v -c -x 'error \w+ pipeline GPUInternalError|invalid [0-9]+ errors' "$tmp/v.out" || echo 0)
+      if [ -s "$tmp/want.txt" ] && cmp -s "$tmp/want.txt" "$tmp/got.txt" && [ "$other" -eq 0 ]; then
+        known_mods=$((known_mods + 1))
+        known_entries=$((known_entries + $(rg -c '.' "$tmp/got.txt")))
+      else
+        echo "FAIL wgsl valid $f: $(head -n 1 "$tmp/v.out") $(head -n 1 "$tmp/w.err"), unlisted: $(comm -13 "$tmp/want.txt" "$tmp/got.txt" | tr '\n' ' ')"
+        fail=$((fail + 1))
+      fi
+    fi
+  done
+  echo "wgsl valid: $wgsl_valid modules"
+  echo "wgsl known internal: $known_mods modules, $known_entries entries"
+  # The differential rows on the WGSL module must print the same OUTPUT.
+  wgsl_rows=0
+  wgsl_bad=0
+  for in_file in "$tmp"/wd/*.in; do
+    file=$(basename "$in_file" .in)
+    k=$(kit examples/kit.txt "$file.lang")
+    if ! build/langc $k build "examples/$file.lang" --wgsl "$tmp/wd/$file.wgsl" 2>"$tmp/w.err" ||
+      ! build/wgsltool "$tmp/wd/$file.wgsl" "$tmp/wd/$file.abi" <"$in_file" >"$tmp/wd/$file.gpu" 2>>"$tmp/w.err"; then
+      echo "FAIL wgsltool $file: $(head -n 1 "$tmp/w.err")"
+      fail=$((fail + 1))
+      continue
+    fi
+    wgsl_rows=$((wgsl_rows + $(rg -c '.' "$in_file")))
+    paste -d '|' "$in_file" "$tmp/wd/$file.want" "$tmp/wd/$file.gpu" | awk -F '|' '$2 != $3' >"$tmp/bad.txt"
+    bad=$(rg -c '.' "$tmp/bad.txt" || echo 0)
+    wgsl_bad=$((wgsl_bad + bad))
+    [ "$bad" -eq 0 ] || { echo "FAIL wgsl differential $file: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
+  done
+  echo "wgsl differential: $wgsl_rows rows, $wgsl_bad mismatches"
+  got=$(echo 'pick 2 4 9' | build/wgsltool "$tmp/wd/entries.wgsl" "$tmp/wd/entries.abi" 2>&1) || true
+  [ "$got" = "trap" ] || { echo "FAIL wgsl pick 2 4 9: want trap, got $got"; fail=$((fail + 1)); }
+  # The test/wasm tables of the Makefile regressions on the WGSL module.
+  for t in hash secp traps; do
+    if ! build/langc --kit build "test/wasm/$t.lang" --wgsl "$tmp/wgsl-$t.wgsl" 2>"$tmp/w.err" ||
+      ! build/langc --kit abi "test/wasm/$t.lang" --text >"$tmp/wgsl-$t.abi" 2>>"$tmp/w.err"; then
+      echo "FAIL wgsl regressions $t: $(head -n 1 "$tmp/w.err")"
+      fail=$((fail + 1))
+      continue
+    fi
+    awk -F ' => ' '/^[^#]/ {print $1}' "test/wasm/$t.txt" | build/wgsltool "$tmp/wgsl-$t.wgsl" "$tmp/wgsl-$t.abi" >"$tmp/wgsl-$t.out" 2>"$tmp/w.err" || :
+    if awk -F ' => ' '/^[^#]/ {print $2}' "test/wasm/$t.txt" | cmp -s - "$tmp/wgsl-$t.out"; then
+      echo "wgsl regressions: passed"
+    else
+      echo "FAIL wgsl regressions: the wgsltool output of test/wasm/$t.lang is not the RESULT text of test/wasm/$t.txt"
+      fail=$((fail + 1))
+    fi
+  done
+  # The test/ir rows on the WGSL module.
+  ir_wgsl_rows=0
+  ir_wgsl_bad=0
+  for m in comb lazy spine proof-trap memname; do
+    [ -f "$tmp/ir/$m.in" ] || continue
+    if ! build/langc --kit build "test/ir/$m.lang" --wgsl "$tmp/ir/$m.wgsl" 2>"$tmp/w.err" ||
+      ! build/wgsltool "$tmp/ir/$m.wgsl" "$tmp/ir/$m.abi" <"$tmp/ir/$m.in" >"$tmp/ir/$m.gpu" 2>>"$tmp/w.err"; then
+      echo "FAIL wgsltool test/ir/$m.lang: $(head -n 1 "$tmp/w.err")"
+      fail=$((fail + 1))
+      continue
+    fi
+    ir_wgsl_rows=$((ir_wgsl_rows + $(rg -c '.' "$tmp/ir/$m.in" || echo 0)))
+    paste -d '|' "$tmp/ir/$m.in" "$tmp/ir/$m.want" "$tmp/ir/$m.gpu" | awk -F '|' '$2 != $3' >"$tmp/bad.txt"
+    bad=$(rg -c '.' "$tmp/bad.txt" || echo 0)
+    ir_wgsl_bad=$((ir_wgsl_bad + bad))
+    [ "$bad" -eq 0 ] || { echo "FAIL test/ir wgsl $m: $bad mismatches, first $(head -n 1 "$tmp/bad.txt")"; fail=$((fail + 1)); }
+  done
+  echo "test/ir wgsl: $ir_wgsl_rows rows, $ir_wgsl_bad mismatches"
+  # The stored rows of test/wgsl/batch.txt (S10 B4b, rulings Q-S10-r9 and
+  # Q-S10-r11). A ballot is 3 entries: sigOk, or0Ok and or1Ok. The wasm module
+  # gives the want text and the WGSL module must give the same text. The or1Ok
+  # row of ballot 37 and chain link 700 are bad: each gives 0. Each other row
+  # gives 1.
+  if build/langc --kit build test/wgsl/batch.lang -o "$tmp/batch.wasm" 2>"$tmp/w.err" &&
+    build/langc --kit build test/wgsl/batch.lang --wgsl "$tmp/batch.wgsl" 2>>"$tmp/w.err" &&
+    build/langc --kit abi test/wgsl/batch.lang --text >"$tmp/batch.abi" 2>>"$tmp/w.err"; then
+    for n in sigOk or0Ok or1Ok linkOk; do
+      rg "^$n " test/wgsl/batch.txt >"$tmp/$n.in" || :
+      build/wasmtool "$tmp/batch.wasm" "$tmp/batch.abi" <"$tmp/$n.in" >"$tmp/$n.want" 2>"$tmp/w.err" || :
+      build/wgsltool "$tmp/batch.wgsl" "$tmp/batch.abi" <"$tmp/$n.in" >"$tmp/$n.gpu" 2>>"$tmp/w.err" || :
+      paste -d '|' "$tmp/$n.in" "$tmp/$n.want" "$tmp/$n.gpu" | awk -F '|' '$2 != $3' >"$tmp/bad.txt"
+      echo "$(rg -c '.' "$tmp/$n.in" || echo 0) $(rg -c '.' "$tmp/bad.txt" || echo 0) $(rg -c -x 1 "$tmp/$n.gpu" || echo 0) $(rg -n -x 0 "$tmp/$n.gpu" | cut -d: -f1 | tr '\n' ' ')" >"$tmp/$n.sum"
+    done
+    read -r s_rows s_bad s_ones s_zero <"$tmp/sigOk.sum"
+    read -r o0_rows o0_bad o0_ones o0_zero <"$tmp/or0Ok.sum"
+    read -r o1_rows o1_bad o1_ones o1_zero <"$tmp/or1Ok.sum"
+    read -r l_rows l_bad l_ones l_zero <"$tmp/linkOk.sum"
+    b_rows=$((s_rows + o0_rows + o1_rows))
+    b_bad=$((s_bad + o0_bad + o1_bad))
+    b_ones=$((s_ones + o0_ones + o1_ones))
+    if [ "$b_rows $b_bad $b_ones $s_zero|$o0_zero|$o1_zero" = "192 0 191 ||37" ]; then
+      echo "wgsl batch: $b_rows rows, $b_bad mismatches"
+    else
+      echo "FAIL wgsl batch: $b_rows rows, $b_bad mismatches, $b_ones rows give 1, 0 at sigOk rows $s_zero, or0Ok rows $o0_zero, or1Ok rows $o1_zero (want 192 0 191, 0 at or1Ok row 37)"
+      fail=$((fail + 1))
+    fi
+    if [ "$l_rows $l_bad $l_ones $l_zero" = "1024 0 1023 700" ]; then
+      echo "wgsl chain: $l_rows links, 1 bad link found"
+    else
+      echo "FAIL wgsl chain: $l_rows links, $l_bad mismatches, $l_ones links give 1, 0 at links $l_zero (want 1024 0 1023 700)"
+      fail=$((fail + 1))
+    fi
+  else
+    echo "FAIL wgsl batch: $(head -n 1 "$tmp/w.err")"
+    fail=$((fail + 1))
+  fi
+fi
 json_want='{"entries":[{"name":"addX","params":["u256","u256","u256","u256"],"result":"u256"},{"name":"addY","params":["u256","u256","u256","u256"],"result":"u256"},{"name":"mulX","params":["u256","u256","u256"],"result":"u256"},{"name":"mulY","params":["u256","u256","u256"],"result":"u256"},{"name":"sigOk","params":["u256","u256","u256","u256","u256"],"result":"flag"}]}'
 json_got=$(build/langc --kit abi test/wasm/secp.lang 2>&1) || json_got="exit $?"
 [ "$json_got" = "$json_want" ] || { echo "FAIL json abi: build/langc --kit abi test/wasm/secp.lang is not the JSON abi line"; fail=$((fail + 1)); }

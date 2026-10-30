@@ -1,0 +1,39 @@
+-- The WGSL batch rows (S10 B4b item 5b, ruling Q-S10-r9). test/gate.sh gives
+-- the rows of test/wgsl/batch.txt to the wasm module and to the WGSL module of
+-- this file and compares the two outputs. gen, negG, pointEq and holds are
+-- the same as in examples/ballot.lang.
+
+def gen : Prod U256 U256 := pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u
+
+-- -G = (n - 1) G = (Gx, p - Gy).
+def negG : Prod U256 U256 := pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0xb7c52588d95c3b9aa25b0403f1eef75702e84bb7597aabe663b82f6f04ef2777u
+
+def pointEq : (p q : Prod U256 U256) -> Flag :=
+  fun (p q : Prod U256 U256) => flagIf (u256Eq (first p) (first q)) (u256Eq (second p) (second q)) flagNo
+
+-- z P = A + e Q: 2 ecMul, 1 ecAdd.
+def holds : (p a q : Prod U256 U256) -> (z e : U256) -> Flag :=
+  fun (p a q : Prod U256 U256) (z e : U256) => pointEq (ecMul p z) (ecAdd a (ecMul q e))
+
+-- A ballot has 3 entries (rulings Q-S10-r10 and Q-S10-r11): an entry with
+-- the sum check and 2 holds does not compile on the Metal backend
+-- (GPUInternalError).
+-- Part 1: the Schnorr signature (k, r, z) on the head m and the entry
+-- hash(yx, yy).
+def sigOk : (k r z m yx yy : U256) -> Flag :=
+  fun (k r z m yx yy : U256) => schnorrOk k r z m (hash yx yy)
+
+-- Part 2: the OR proof that Y = (yx, yy) is x G or x G + G, branch 0. The
+-- two challenges c0 and c1 add up to the hash of A0.x, A1.x and the entry,
+-- and z0 G = A0 + c0 Y.
+def or0Ok : (yx yy a0x a0y a1x c0 c1 z0 : U256) -> Flag :=
+  fun (yx yy a0x a0y a1x c0 c1 z0 : U256) => flagIf (u256Eq (u256Add c0 c1) (hash (hash a0x a1x) (hash yx yy))) (holds gen (pair a0x a0y) (pair yx yy) z0 c0) flagNo
+
+-- Part 3: the OR proof, branch 1: z1 G = A1 + c1 (Y - G).
+def or1Ok : (yx yy a1x a1y c1 z1 : U256) -> Flag :=
+  fun (yx yy a1x a1y c1 z1 : U256) => holds gen (pair a1x a1y) (ecAdd (pair yx yy) negG) z1 c1
+
+-- A link of a hash chain: the claimed word is the hash of the parent and the
+-- payload.
+def linkOk : (parent payload claimed : U256) -> Flag :=
+  fun (parent payload claimed : U256) => u256Eq (hash parent payload) claimed

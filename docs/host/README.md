@@ -169,9 +169,11 @@ what the domain holds and how to change it.
 | `parse refusals: 19 checked` | each `test/parse` file fails with the code in `test/parse/expect.txt`; one file has 1100 nested parentheses |
 | `check refusals: 197 checked` | each `test/check` mutant fails with the code in `test/check/expect.txt`; the `TYPE_REFL` message shows both normal forms |
 | `evals: 245 checked` | `langc eval` gives each result in `test/eval/expect.txt` |
-| `build refusals: 8 checked` | `langc build examples/dao.lang -o OUT` exits 0, writes nothing on stdout and writes a valid module; each refused build exits 1 with its code and writes nothing on stdout; the rows include the transp row (`test/ir/transp.lang`, `REFUSE_LOWER`), two `REFUSE_TARGET_SECRET` rows (`test/ir/secret-key.lang`, `test/ir/secret-sign.lang`, O6), the elim row (`test/ir/tree-elim.lang`, `REFUSE_RUNTIME_TREE`, O26) and a guest-mode `REFUSE_KIT` row |
+| `build refusals: 9 checked` | `langc build examples/dao.lang -o OUT` exits 0, writes nothing on stdout and writes a valid module; each refused build exits 1 with its code and writes nothing on stdout; the rows include the transp row (`test/ir/transp.lang`, `REFUSE_LOWER`), three `REFUSE_TARGET_SECRET` rows (`test/ir/secret-key.lang`, `test/ir/secret-sign.lang`, O6, and `test/ir/secret-key.lang` with `--wgsl`), the elim row (`test/ir/tree-elim.lang`, `REFUSE_RUNTIME_TREE`, O26) and a guest-mode `REFUSE_KIT` row |
 | `ir: 56 lowered, 1 refused (HOST-LIMIT)` | `langc ir` lowers each example, with one `func` for each `abi --text` line derived independently from checked types; an example that does not lower refuses `REFUSE_LOWER` with a `HOST-LIMIT` detail |
 | `wasm: 56 modules valid` | `langc build` writes a module for each lowered example, and `wasm-validate` and `wasm-objdump -x` accept it |
+| `wgsl: 56 modules written` | `langc build PROG --wgsl OUT.wgsl` writes a WGSL compute module for each lowered example; each build exits 0 and writes nothing on stdout |
+| `wgsl refusals: 2 checked` | each `--wgsl` usage row of `src/main.c` fails with its message: `--wgsl` with `--js`, and `--wgsl` with no path |
 | `wasm differential: 81 rows, 0 mismatches` | `build/wasmtool` (`test/wasmtool.c`, on the wasmtime C API) runs each `test/eval/expect.txt` row whose name is an entry of its file; each result is equal to the row result, and a trap is equal to a trap |
 | `js differential: 81 rows, 0 mismatches` | `langc build PROG --js OUT.mjs` writes an ES module for each lowered example, and `build/jstool` (`test/jstool.c`, node through `popen`) runs the rows of the `wasm differential` line; each result is equal to the row result, and a trap is equal to a trap |
 | `test/ir wasm: 5 modules valid, 32 rows, 0 mismatches` | each `test/ir` module builds in `--kit` mode and is valid, and each row of the gate list gives the same result on `build/wasmtool` and in `langc --kit eval` |
@@ -200,6 +202,22 @@ module. They cover neutral path endpoints,
 trapped curve coordinates, and unused invalid curve results. It checks
 that `abi --text` still reports checked signatures when lowering refuses
 `test/ir/transp.lang`.
+
+`make gpu-check` runs `sh test/gate.sh gpu`, the WebGPU rows (S10). It
+needs a GPU adapter, so it runs outside the sandbox. `build/wgsltool`
+(`test/wgsltool.c`) gives each WGSL module to deno (`--unstable-webgpu`;
+`docs/VALIDATION.md` V11). `make check` skips these rows. `make gpu-check`
+prints these lines when it is GREEN:
+
+| Line | What the gate does |
+|---|---|
+| `wgsl valid: 52 modules` | the GPU compiles each entry of the WGSL module of each lowered example; the 4 modules of `test/wgsl/internal.txt` are not counted |
+| `wgsl known internal: 4 modules, 20 entries` | each entry of `test/wgsl/internal.txt` gives `GPUInternalError` (the Metal backend limit, `docs/VALIDATION.md` V15), and no other entry does |
+| `wgsl differential: 81 rows, 0 mismatches` | `build/wgsltool` runs the rows of the `wasm differential` line; each result is equal to the row result, and a trap is equal to a trap |
+| `wgsl regressions: passed` | the rows of `test/wasm/hash.txt`, `test/wasm/secp.txt` and `test/wasm/traps.txt` on the WGSL module, so the gate prints this line three times |
+| `test/ir wgsl: 32 rows, 0 mismatches` | each row of the `test/ir` gate list gives the same result on `build/wgsltool` and in `langc --kit eval` |
+| `wgsl batch: 192 rows, 0 mismatches` | the batch proof check of `test/wgsl/batch.lang` on the rows of `test/wgsl/batch.txt`: 64 rows each for `sigOk`, `or0Ok` and `or1Ok` |
+| `wgsl chain: 1024 links, 1 bad link found` | the chain rehash of `test/wgsl/batch.lang` checks 1024 links on the GPU and finds the one bad link |
 
 ## Known limits
 
