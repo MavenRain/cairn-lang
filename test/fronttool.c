@@ -1,9 +1,13 @@
-/* Domain declaration regressions use the same parser and checker as langc. */
+/* Domain declaration regressions use the same parser and checker as langc.
+   `fronttool dump FILE` prints the syntax tree of FILE, one node a line and
+   no positions, so a file and its fmt text can be compared. */
 #include <stdio.h>
 #include <string.h>
 
 #include "front/blsag.h"
 #include "front/check.h"
+#include "front/fmt.h"
+#include "front/front.h"
 #include "front/lexer.h"
 #include "front/parser.h"
 
@@ -266,8 +270,131 @@ static int prove_output(int trap, int broken, const char *poll) {
   return ok;
 }
 
-int main(void) {
+static const char *const TERM_KINDS[] = {"var",  "nat",   "word",  "app",   "lam",    "pi",     "sigma",
+                                         "univ", "papp",  "ineg",  "imeet", "ijoin",  "system", "branch"};
+static const char *const DECL_KINDS[] = {"def", "axiom", "family", "cofamily"};
+
+static void dump_term(const char *role, const Term *t, int depth) {
+  if (t == NULL) return;
+  printf("%*s%s %s", depth * 2, "", role, TERM_KINDS[t->kind]);
+  if (t->name != NULL) printf(" %s", t->name);
+  if (t->kind == TERM_NAT || t->kind == TERM_UNIV || t->kind == TERM_WORD) printf(" %llu", (unsigned long long)t->nat);
+  if (t->kind == TERM_WORD && t->word != NULL)
+    printf(" %016llx%016llx%016llx%016llx", (unsigned long long)t->word->limb[3], (unsigned long long)t->word->limb[2],
+           (unsigned long long)t->word->limb[1], (unsigned long long)t->word->limb[0]);
+  putchar('\n');
+  dump_term("left", t->left, depth + 1);
+  dump_term("right", t->right, depth + 1);
+}
+
+static void dump_fields(const char *role, const Field *fields, size_t count, int depth) {
+  size_t i;
+  for (i = 0; i < count; i++) {
+    printf("%*s%s %s%s\n", depth * 2, "", role, fields[i].name == NULL ? "_" : fields[i].name,
+           fields[i].history ? " history" : "");
+    dump_term("type", fields[i].type, depth + 1);
+  }
+}
+
+/* dump parses FILE as a program (as langc fmt does) and prints each decl:
+   its kind, name, flags and block, then its params, index, type, body and
+   ctors. Exit 1 on a lex or parse error, 2 on a read error. */
+static int dump(const char *file) {
+  static char text[1 << 20];
+  FILE *in = fopen(file, "rb");
+  if (in == NULL) {
+    fprintf(stderr, "fronttool: cannot read %s\n", file);
+    return 2;
+  }
+  size_t len = fread(text, 1, sizeof text, in);
+  fclose(in);
+  if (len == sizeof text) {
+    fprintf(stderr, "fronttool: %s is too large\n", file);
+    return 2;
+  }
+  Arena arena;
+  Diag diag;
+  TokenList tokens = {0};
+  DeclList decls = {0};
+  arena_init(&arena, (size_t)1 << 24);
+  diag_init(&diag);
+  int ok = lex_source(&arena, file, text, len, &tokens, &diag)
+    && parse_source(&arena, file, ORIGIN_PROGRAM, &tokens, &decls, &diag);
+  if (!ok) diag_print(&diag, stderr);
+  size_t i, j;
+  for (i = 0; ok && i < decls.count; i++) {
+    const Decl *d = &decls.items[i];
+    printf("%s %s%s%s%s%s%s block %zu %zu\n", DECL_KINDS[d->kind], d->name, d->is_rec ? " rec" : "",
+           d->is_state ? " state" : "", d->is_event ? " event" : "", d->is_sealed ? " sealed" : "",
+           d->is_law ? " law" : "", d->block_first, d->block_count);
+    dump_fields("param", d->params, d->param_count, 1);
+    dump_term("index", d->index, 1);
+    dump_term("type", d->type, 1);
+    dump_term("body", d->body, 1);
+    for (j = 0; j < d->ctor_count; j++) {
+      printf("  ctor %s\n", d->ctors[j].name);
+      dump_fields("field", d->ctors[j].fields, d->ctors[j].field_count, 2);
+      dump_term("result", d->ctors[j].result, 2);
+      dump_term("boundary", d->ctors[j].boundary, 2);
+    }
+  }
+  arena_release(&arena);
+  return ok ? 0 : 1;
+}
+
+/* The original text parses, but a canonical spelling can cross a compiler
+   limit. The command must refuse that text before it reaches stdout. */
+static int fmt_limit(const char *kind, size_t count, const char *want) {
+  static char source[SOURCE_MAX_BYTES + 1u];
+  size_t at = 0;
+  if (strcmp(kind, "size") == 0) {
+    const char *tail = "\ndef n:Nat:=0\n";
+    at = SOURCE_MAX_BYTES - strlen(tail);
+    memset(source, 'a', at);
+    source[0] = '-';
+    source[1] = '-';
+    memcpy(source + at, tail, strlen(tail) + 1u);
+  } else {
+    int sigma = strcmp(kind, "sigma") == 0;
+    int lambda = strcmp(kind, "lambda") == 0;
+    at += (size_t)snprintf(source + at, sizeof source - at, "def deep : Type 0 := %s", lambda ? "fun (" : sigma ? "" : "(");
+    for (size_t i = 0; i < count; i++)
+      at += (size_t)snprintf(source + at, sizeof source - at, sigma ? "Sigma (x%zu : Nat) " : "x%zu ", i);
+    snprintf(source + at, sizeof source - at, "%s", sigma ? "Nat\n" : lambda ? ": Nat) => x0\n" : ": Nat) -> Nat\n");
+  }
+  Arena arena;
+  Diag diag;
+  TokenList toks = {0};
+  DeclList decls = {0};
+  FmtText out;
+  arena_init(&arena, (size_t)1 << 29);
+  diag_init(&diag);
+  fmt_text_init(&out, &arena);
+  int ok = lex_source(&arena, "fmt-limit", source, strlen(source), &toks, &diag)
+    && parse_source(&arena, "fmt-limit", ORIGIN_PROGRAM, &toks, &decls, &diag)
+    && fmt_program(&out, decls.items, decls.count, &toks);
+  if (ok) {
+    int valid = fmt_validate(&out, "fmt-limit", &diag);
+    ok = want == NULL ? valid && !diag.set : !valid && diag.set && strcmp(diag.code, want) == 0;
+  }
+  if (!ok) fprintf(stderr, "FAIL fmt %s limit: want %s, got %s\n", kind,
+                   want == NULL ? "accepted" : want, diag.code == NULL ? "accepted" : diag.code);
+  arena_release(&arena);
+  return ok;
+}
+
+int main(int argc, char **argv) {
+  if (argc == 3 && strcmp(argv[1], "dump") == 0) return dump(argv[2]);
+  if (argc != 1) {
+    fputs("usage: fronttool [dump FILE]\n", stderr);
+    return 2;
+  }
   int ok = 1;
+  ok &= fmt_limit("sigma", 400u, NULL);
+  ok &= fmt_limit("sigma", 510u, "PARSE_DEPTH");
+  ok &= fmt_limit("pi", 1001u, "PARSE_DEPTH");
+  ok &= fmt_limit("lambda", 1001u, "PARSE_DEPTH");
+  ok &= fmt_limit("size", 0u, "FMT_SIZE");
   /* Kernel set constants have fixed types, even without the domain aliases. */
   ok &= domain("def s : (x y : Nat) -> (p q : Path Nat x y) -> Path (Path Nat x y) p q := natIsSet", NULL);
   ok &= domain("def s : (x y : U256) -> (p q : Path U256 x y) -> Path (Path U256 x y) p q := u256IsSet", NULL);

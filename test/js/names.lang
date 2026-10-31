@@ -1,3 +1,5 @@
 def default : Nat -> Nat := fun x => x
+
 def a' : Nat -> Nat := fun x => natAdd x 1
+
 def then : Nat -> Nat := fun x => natAdd x 2

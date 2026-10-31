@@ -4,65 +4,107 @@
 -- D = hash P_0.x P_0.y, then hash (hash D P_k.x) P_k.y. The challenge folds hash left over tag, D, poll id, choice, I, L, R.
 -- Signing scalars hash (tag, x, D, poll id, choice, index, role): role 0 for alpha, 1 for public responses.
 -- A signature is the word list c_1, s_1 to s_n, I.x, I.y: the cast calldata words after the choice (O28).
-
-def g : Prod U256 U256 := pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u
+def g : Prod U256 U256 :=
+  pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u
 
 -- The test keys x_i = hash (tag, i) mod r and the points P_i = x_i G.
 def k0 : U256 := zkKey 0
+
 def k1 : U256 := zkKey 1
+
 def k2 : U256 := zkKey 2
+
 def p0 : Prod U256 U256 := ecMul g k0
+
 def p1 : Prod U256 U256 := ecMul g k1
+
 def p2 : Prod U256 U256 := ecMul g k2
 
 -- H_p of G and of each ring point. A counter row records the accepted counter k of a point: flagYes when H_p.x is x_k.
 def hG : Prod U256 U256 := zkHp g
+
 def h0 : Prod U256 U256 := zkHp p0
+
 def h1 : Prod U256 U256 := zkHp p1
+
 def h2 : Prod U256 U256 := zkHp p2
 
 def ring2 : List (Prod U256 U256) := cons p0 (cons p1 nil)
+
 def ring3 : List (Prod U256 U256) := cons p0 (cons p1 (cons p2 nil))
+
 def d2 : U256 := zkDigest ring2
+
 def d3 : U256 := zkDigest ring3
 
 -- The vectors: member 0 of ring2 casts choice 1 in poll 0; member 2 of ring3 casts choice 1 in poll 0.
 def sig2 : List U256 := zkSign ring2 k0 0u 1u
+
 def sig3 : List U256 := zkSign ring3 k2 0u 1u
+
 def ok2 : Flag := zkVerify ring2 0u 1u sig2
+
 def ok3 : Flag := zkVerify ring3 0u 1u sig3
 
 -- The other choice, another poll, the ring in another order and the other ring reject.
 def flip2 : Flag := zkVerify ring2 0u 0u sig2
+
 def poll2 : Flag := zkVerify ring2 1u 1u sig2
+
 def swap2 : Flag := zkVerify (cons p1 (cons p0 nil)) 0u 1u sig2
+
 def other2 : Flag := zkVerify ring3 0u 1u sig2
 
 -- A signer whose point is not in the ring traps (an entry Nat -> Flag, as the trap rows of secp256k1.lang).
-def noSigner : Nat -> Flag := fun (n : Nat) => zkVerify ring2 (toU256 n) 1u (zkSign ring2 k2 (toU256 n) 1u)
+def noSigner : Nat -> Flag :=
+  fun (n : Nat) => zkVerify ring2 (toU256 n) 1u (zkSign ring2 k2 (toU256 n) 1u)
 
 -- The counter of each H_p row: the entry is flagYes at the accepted counter k and flagNo below it.
 -- G accepts at k = 0 (the witness that the counter starts at 0), P_0 at 1, P_1 at 0, P_2 at 0, 2G at 1. P_0 at k = 0 is flagNo: x_0^3 + 7 is not a square.
 def twoG : Prod U256 U256 := ecMul g 2u
+
 def hTwoG : Prod U256 U256 := zkHp twoG
-def hTwoGk : Nat -> Flag := fun (n : Nat) => u256Eq (first hTwoG) (hash (hash (first twoG) (second twoG)) (toU256 n))
-def hGk : Nat -> Flag := fun (n : Nat) => u256Eq (first hG) (hash (hash (first g) (second g)) (toU256 n))
-def h0k : Nat -> Flag := fun (n : Nat) => u256Eq (first h0) (hash (hash (first p0) (second p0)) (toU256 n))
-def h1k : Nat -> Flag := fun (n : Nat) => u256Eq (first h1) (hash (hash (first p1) (second p1)) (toU256 n))
-def h2k : Nat -> Flag := fun (n : Nat) => u256Eq (first h2) (hash (hash (first p2) (second p2)) (toU256 n))
+
+def hTwoGk : Nat -> Flag :=
+  fun (n : Nat) => u256Eq (first hTwoG) (hash (hash (first twoG) (second twoG)) (toU256 n))
+
+def hGk : Nat -> Flag :=
+  fun (n : Nat) => u256Eq (first hG) (hash (hash (first g) (second g)) (toU256 n))
+
+def h0k : Nat -> Flag :=
+  fun (n : Nat) => u256Eq (first h0) (hash (hash (first p0) (second p0)) (toU256 n))
+
+def h1k : Nat -> Flag :=
+  fun (n : Nat) => u256Eq (first h1) (hash (hash (first p1) (second p1)) (toU256 n))
+
+def h2k : Nat -> Flag :=
+  fun (n : Nat) => u256Eq (first h2) (hash (hash (first p2) (second p2)) (toU256 n))
 
 -- An independent valid signature as literals: c_1, s_1, s_2, I.x, I.y of member 0 of ring2, poll 0, choice 1.
-def r : U256 := 115792089237316195423570985008687907852837564279074904382605163141518161494337u
-def c1 : U256 := 86930061773246035631165259675978797945494595148399517724325541345219363945438u
-def s1 : U256 := 105641472807153520921459517267616568296229896758480428451843474582494660022135u
-def s2 : U256 := 82886770893882655844345751413594366182258098822316393450470093798443781333421u
-def ix : U256 := 56268930783816757511029368742626001972857641271994346638743548308582773199663u
-def iy : U256 := 52861687791537515394358608675875391173428757019198186079123870589823507926433u
+def r : U256 := 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141u
+
+def c1 : U256 := 0xc030abde16f12124187189c86384fca98a2f5f0cb0effc33fbc4d627b87f3bdeu
+
+def s1 : U256 := 0xe98ef4670a2af761b6be971a1fb5db3f8c20fbbd177780ae532a26d8c9004f77u
+
+def s2 : U256 := 0xb7403ff41a225cdaedd2cc46856b4365d18a6d3960b77e491f81d1eeb9ea21adu
+
+def ix : U256 := 0x7c6716118f3376f28961119891955b7d4ff4d831fbbf77e8610415880f7a932fu
+
+def iy : U256 := 0x74dea7aeebbf875e5642ebc4bb6a06f1a8b4745698db907a622dcd2d41ae8da1u
+
 def lit2 : Flag := zkVerify ring2 0u 1u (cons c1 (cons s1 (cons s2 (cons ix (cons iy nil)))))
+
 -- s_1 = r is out of range: rejected without a chain. I = (0, 0): rejected. Two words for a ring of two: rejected.
 def range2 : Flag := zkVerify ring2 0u 1u (cons c1 (cons r (cons s2 (cons ix (cons iy nil)))))
+
 def zero2 : Flag := zkVerify ring2 0u 1u (cons c1 (cons s1 (cons s2 (cons 0u (cons 0u nil)))))
+
 def short2 : Flag := zkVerify ring2 0u 1u (cons c1 (cons s1 nil))
+
 -- I = (1, n) is off the curve at n = 1: a trap, as the 0x07 revert. curveG: I = n G is on the curve but is not the key image: rejected (Q-S4-9 (b)).
-def curve2 : Nat -> Flag := fun (n : Nat) => zkVerify ring2 0u 1u (cons c1 (cons s1 (cons s2 (cons 1u (cons (toU256 n) nil)))))
-def curveG : Nat -> Flag := fun (n : Nat) => zkVerify ring2 0u 1u (cons c1 (cons s1 (cons s2 (cons (first (ecMul g (toU256 n))) (cons (second (ecMul g (toU256 n))) nil)))))
+def curve2 : Nat -> Flag :=
+  fun (n : Nat) => zkVerify ring2 0u 1u (cons c1 (cons s1 (cons s2 (cons 1u (cons (toU256 n) nil)))))
+
+def curveG : Nat -> Flag :=
+  fun (n : Nat) => zkVerify ring2 0u 1u (cons c1 (cons s1 (cons s2 (cons (first (ecMul g (toU256 n))) (cons (second (ecMul g (toU256 n))) nil)))))

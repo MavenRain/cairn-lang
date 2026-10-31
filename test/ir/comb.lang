@@ -3,13 +3,31 @@
 -- fmChain reads a record left to right and fmRun right to left; the digit
 -- fold 3d + a is not symmetric, so a swapped side or order gives a different
 -- value. The gate compares langc eval results.
-def snocs : (n : Nat) -> FreeMon Nat := fun (n : Nat) => fold (fun (m : FreeMon Nat) => fmMul Nat (fmMul Nat m (fmEta Nat 1)) (fmEta Nat 2)) (fmUnit Nat) n
-def conses : (n : Nat) -> FreeMon Nat := fun (n : Nat) => fold (fun (m : FreeMon Nat) => fmMul Nat (fmEta Nat 3) (fmMul Nat (fmEta Nat 4) m)) (fmUnit Nat) n
-def mixes : (n : Nat) -> FreeMon Nat := fun (n : Nat) => fold (fun (m : FreeMon Nat) => fmMul Nat (fmEta Nat 1) (fmMul Nat m (fmEta Nat 2))) (fmUnit Nat) n
-def snocChain : (n : Nat) -> Nat := fun (n : Nat) => fmChain Nat Nat natIsSet (fun (d : Nat) (a : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (snocs n)
-def snocRun : (n : Nat) -> Nat := fun (n : Nat) => fmRun Nat Nat natIsSet (fun (a : Nat) (d : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (snocs n)
-def consChain : (n : Nat) -> Nat := fun (n : Nat) => fmChain Nat Nat natIsSet (fun (d : Nat) (a : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (conses n)
-def consRun : (n : Nat) -> Nat := fun (n : Nat) => fmRun Nat Nat natIsSet (fun (a : Nat) (d : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (conses n)
-def mixChain : (n : Nat) -> Nat := fun (n : Nat) => fmChain Nat Nat natIsSet (fun (d : Nat) (a : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (mixes n)
-def mixRun : (n : Nat) -> Nat := fun (n : Nat) => fmRun Nat Nat natIsSet (fun (a : Nat) (d : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (mixes n)
+def snocs : (n : Nat) -> FreeMon Nat :=
+  fun (n : Nat) => fold (fun (m : FreeMon Nat) => fmMul Nat (fmMul Nat m (fmEta Nat 1)) (fmEta Nat 2)) (fmUnit Nat) n
+
+def conses : (n : Nat) -> FreeMon Nat :=
+  fun (n : Nat) => fold (fun (m : FreeMon Nat) => fmMul Nat (fmEta Nat 3) (fmMul Nat (fmEta Nat 4) m)) (fmUnit Nat) n
+
+def mixes : (n : Nat) -> FreeMon Nat :=
+  fun (n : Nat) => fold (fun (m : FreeMon Nat) => fmMul Nat (fmEta Nat 1) (fmMul Nat m (fmEta Nat 2))) (fmUnit Nat) n
+
+def snocChain : (n : Nat) -> Nat :=
+  fun (n : Nat) => fmChain Nat Nat natIsSet (fun (d : Nat) (a : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (snocs n)
+
+def snocRun : (n : Nat) -> Nat :=
+  fun (n : Nat) => fmRun Nat Nat natIsSet (fun (a : Nat) (d : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (snocs n)
+
+def consChain : (n : Nat) -> Nat :=
+  fun (n : Nat) => fmChain Nat Nat natIsSet (fun (d : Nat) (a : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (conses n)
+
+def consRun : (n : Nat) -> Nat :=
+  fun (n : Nat) => fmRun Nat Nat natIsSet (fun (a : Nat) (d : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (conses n)
+
+def mixChain : (n : Nat) -> Nat :=
+  fun (n : Nat) => fmChain Nat Nat natIsSet (fun (d : Nat) (a : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (mixes n)
+
+def mixRun : (n : Nat) -> Nat :=
+  fun (n : Nat) => fmRun Nat Nat natIsSet (fun (a : Nat) (d : Nat) => natAdd (natAdd (natAdd d d) d) a) 0 (mixes n)
+
 def snocLen : (n : Nat) -> Nat := fun (n : Nat) => len Nat (snocs n)

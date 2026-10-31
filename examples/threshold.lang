@@ -15,60 +15,75 @@ def init : State := makeState 0
 
 def dleqTag : U256 := 1684825457u
 
-def challenge : (pkx pky cx cy dx dy ax ay bx by : U256) -> U256 :=
-  fun (pkx pky cx cy dx dy ax ay bx by : U256) =>
-    hash (hash (hash (hash (hash (hash (hash (hash (hash (hash dleqTag pkx) pky) cx) cy) dx) dy) ax) ay) bx) by
+def challenge : (pkx : U256) -> (pky : U256) -> (cx : U256) -> (cy : U256) -> (dx : U256) -> (dy : U256) -> (ax : U256) -> (ay : U256) -> (bx : U256) -> (by : U256) -> U256 :=
+  fun (pkx : U256) (pky : U256) (cx : U256) (cy : U256) (dx : U256) (dy : U256) (ax : U256) (ay : U256) (bx : U256) (by : U256) => hash (hash (hash (hash (hash (hash (hash (hash (hash (hash dleqTag pkx) pky) cx) cy) dx) dy) ax) ay) bx) by
 
-def pointEq : (p q : Prod U256 U256) -> Flag :=
-  fun (p q : Prod U256 U256) => flagIf (u256Eq (first p) (first q)) (u256Eq (second p) (second q)) flagNo
+def pointEq : (p : Prod U256 U256) -> (q : Prod U256 U256) -> Flag :=
+  fun (p : Prod U256 U256) (q : Prod U256 U256) => flagIf (u256Eq (first p) (first q)) (u256Eq (second p) (second q)) flagNo
 
-def dleqWith : (pkx pky cx cy dx dy ax ay bx by z e : U256) -> Flag :=
-  fun (pkx pky cx cy dx dy ax ay bx by z e : U256) =>
-    flagIf (pointEq (ecMul (pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u) z) (ecAdd (pair ax ay) (ecMul (pair pkx pky) e)))
-      (pointEq (ecMul (pair cx cy) z) (ecAdd (pair bx by) (ecMul (pair dx dy) e)))
-      flagNo
+def dleqWith : (pkx : U256) -> (pky : U256) -> (cx : U256) -> (cy : U256) -> (dx : U256) -> (dy : U256) -> (ax : U256) -> (ay : U256) -> (bx : U256) -> (by : U256) -> (z : U256) -> (e : U256) -> Flag :=
+  fun (pkx : U256) (pky : U256) (cx : U256) (cy : U256) (dx : U256) (dy : U256) (ax : U256) (ay : U256) (bx : U256) (by : U256) (z : U256) (e : U256) => flagIf (pointEq (ecMul (pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u) z) (ecAdd (pair ax ay) (ecMul (pair pkx pky) e))) (pointEq (ecMul (pair cx cy) z) (ecAdd (pair bx by) (ecMul (pair dx dy) e))) flagNo
 
-def dleq : (pkx pky cx cy dx dy ax ay bx by z : U256) -> Flag :=
-  fun (pkx pky cx cy dx dy ax ay bx by z : U256) =>
-    dleqWith pkx pky cx cy dx dy ax ay bx by z (challenge pkx pky cx cy dx dy ax ay bx by)
+def dleq : (pkx : U256) -> (pky : U256) -> (cx : U256) -> (cy : U256) -> (dx : U256) -> (dy : U256) -> (ax : U256) -> (ay : U256) -> (bx : U256) -> (by : U256) -> (z : U256) -> Flag :=
+  fun (pkx : U256) (pky : U256) (cx : U256) (cy : U256) (dx : U256) (dy : U256) (ax : U256) (ay : U256) (bx : U256) (by : U256) (z : U256) => dleqWith pkx pky cx cy dx dy ax ay bx by z (challenge pkx pky cx cy dx dy ax ay bx by)
 
-def opens : (ux uy vx vy n : U256) -> Flag :=
-  fun (ux uy vx vy n : U256) => pointEq (pair ux uy) (ecAdd (ecMul (pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u) n) (pair vx vy))
+def opens : (ux : U256) -> (uy : U256) -> (vx : U256) -> (vy : U256) -> (n : U256) -> Flag :=
+  fun (ux : U256) (uy : U256) (vx : U256) (vy : U256) (n : U256) => pointEq (pair ux uy) (ecAdd (ecMul (pair 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798u 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8u) n) (pair vx vy))
 
 -- One DLEQ proof: 4 ecMul, 2 ecAdd, 10 hash.
-def dleqOk : (env : Env) -> (s : State) -> (pkx pky cx cy dx dy ax ay bx by z : U256) -> Flag :=
-  fun (env : Env) (s : State) (pkx pky cx cy dx dy ax ay bx by z : U256) => dleq pkx pky cx cy dx dy ax ay bx by z
+def dleqOk : (env : Env) -> (s : State) -> (pkx : U256) -> (pky : U256) -> (cx : U256) -> (cy : U256) -> (dx : U256) -> (dy : U256) -> (ax : U256) -> (ay : U256) -> (bx : U256) -> (by : U256) -> (z : U256) -> Flag :=
+  fun (env : Env) (s : State) (pkx : U256) (pky : U256) (cx : U256) (cy : U256) (dx : U256) (dy : U256) (ax : U256) (ay : U256) (bx : U256) (by : U256) (z : U256) => dleq pkx pky cx cy dx dy ax ay bx by z
 
 -- K = l1 D1 + l2 D2: 2 ecMul, 1 ecAdd.
-def combineX : (env : Env) -> (s : State) -> (ux uy l vx vy k : U256) -> U256 :=
-  fun (env : Env) (s : State) (ux uy l vx vy k : U256) => first (ecAdd (ecMul (pair ux uy) l) (ecMul (pair vx vy) k))
+def combineX : (env : Env) -> (s : State) -> (ux : U256) -> (uy : U256) -> (l : U256) -> (vx : U256) -> (vy : U256) -> (k : U256) -> U256 :=
+  fun (env : Env) (s : State) (ux : U256) (uy : U256) (l : U256) (vx : U256) (vy : U256) (k : U256) => first (ecAdd (ecMul (pair ux uy) l) (ecMul (pair vx vy) k))
 
-def combineY : (env : Env) -> (s : State) -> (ux uy l vx vy k : U256) -> U256 :=
-  fun (env : Env) (s : State) (ux uy l vx vy k : U256) => second (ecAdd (ecMul (pair ux uy) l) (ecMul (pair vx vy) k))
+def combineY : (env : Env) -> (s : State) -> (ux : U256) -> (uy : U256) -> (l : U256) -> (vx : U256) -> (vy : U256) -> (k : U256) -> U256 :=
+  fun (env : Env) (s : State) (ux : U256) (uy : U256) (l : U256) (vx : U256) (vy : U256) (k : U256) => second (ecAdd (ecMul (pair ux uy) l) (ecMul (pair vx vy) k))
 
 -- C2 = m G + K: 1 ecMul, 1 ecAdd.
-def openOk : (env : Env) -> (s : State) -> (ux uy vx vy n : U256) -> Flag :=
-  fun (env : Env) (s : State) (ux uy vx vy n : U256) => opens ux uy vx vy n
+def openOk : (env : Env) -> (s : State) -> (ux : U256) -> (uy : U256) -> (vx : U256) -> (vy : U256) -> (n : U256) -> Flag :=
+  fun (env : Env) (s : State) (ux : U256) (uy : U256) (vx : U256) (vy : U256) (n : U256) => opens ux uy vx vy n
 
 -- The host words (closed: the evaluator computes the curve ops and hashes).
-def pk1x : U256 := 0x05b9c08ff8a12a868bfde19b5df1e989f5ad9e4d69d426e343261100e2f75683u
+def pk1x : U256 := 0x5b9c08ff8a12a868bfde19b5df1e989f5ad9e4d69d426e343261100e2f75683u
+
 def pk1y : U256 := 0xb6ead4f3d466575e9d3f9feccda1a8bf51556d4f0fff685244c006af83c928a6u
+
 def c1x : U256 := 0xa39dcfcb2de53f5c6a94fe755a1ed41680285350c2d31b9936834b032627b2beu
+
 def c1y : U256 := 0x88600a13e957d1db6e55d07fe9dbf0009512fe0a44e2c6c409d57199d74161bcu
+
 def d1x : U256 := 0xeb267dd8333c8d9e0a153fbbd6e770b489f1df0e99e291577d8feceeb6a3f24bu
+
 def d1y : U256 := 0x3d62f3f81d779d6a99f10bfc9f8cdfaf698c7a6fbb8a0c798411e0eabb748632u
+
 def a1x : U256 := 0x22ad1bdcf99933dab50113a21983c25a16618d048d8bf0dd437e500a4a704a57u
+
 def a1y : U256 := 0x587fc8a68f08ebae86f73f2b19cb17e87d8d94532c0c971e54a01159b5aca425u
+
 def b1x : U256 := 0xe753e00e8a10e1ae942fcd36b8950ed3a01f2f900c588fe3ce7d3902425efd34u
+
 def b1y : U256 := 0xd0541b95f03973b5497da32650aa54b6a6d680899dbbe4855f00a7591e5b8b02u
+
 def z1 : U256 := 0xdc5dc592882595fbec40f98df335cf8b0d5f9bbcf2b3e75f88a8625f6509ea61u
+
 def z1bad : U256 := 0xdc5dc592882595fbec40f98df335cf8b0d5f9bbcf2b3e75f88a8625f6509ea62u
+
 def kx : U256 := 0xd9045c59c01d95429da9a07a1d45a2b94dba90a20ee1a4c843cc95ddce37daf1u
+
 def ky : U256 := 0xfb3aab7fc3d410a311a820ccf56d7fcefd5529a057299dad966fc35de406d3c9u
+
 def c2x : U256 := 0x309681fc47f238456d8f22ac1a7f24c69d34e0901c2c035602c3ac8e7ccb8189u
+
 def c2y : U256 := 0x1fb55734602b6493d56f85bd8fde6a83931c64253d1cca04947324de616689d2u
-def m : U256 := 0x00000000000000000000000000000000000000000000000000000000000004d2u
+
+def m : U256 := 1234u
+
 def dleqGood : Flag := dleq pk1x pk1y c1x c1y d1x d1y a1x a1y b1x b1y z1
+
 def dleqBad : Flag := dleq pk1x pk1y c1x c1y d1x d1y a1x a1y b1x b1y z1bad
+
 def openGood : Flag := opens c2x c2y kx ky m
+
 def openBad : Flag := opens c2x c2y kx ky 1235u

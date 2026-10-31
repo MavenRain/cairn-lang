@@ -1,2 +1,4 @@
 state State := makeState
-def e : (env : Env) -> (s : State) -> Option (Prod State (List Out)) := fun (env : Env) (s : State) => none
+
+def e : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) => none

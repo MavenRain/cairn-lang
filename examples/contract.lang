@@ -7,6 +7,7 @@ event Stamped (held : U256) (earned : U256)
 
 -- The events of deposit and withdraw (S5 O15: Out has no token transfer).
 event Deposited (payer : Addr) (amount : U256)
+
 event Withdrawn (payee : Addr) (amount : U256)
 
 -- The start state of `langc run` (K3b).
@@ -14,28 +15,21 @@ def init : State := makeState 0x00000000000000000000000000000000000000aa 0u 0u 0
 
 -- Entry: add the amount to held and log the caller and the amount (event Deposited).
 def deposit : (env : Env) -> (s : State) -> (amount : U256) -> Option (Prod State (List Out)) :=
-  fun (env : Env) (s : State) (amount : U256) =>
-    some (pair (makeState (owner s) (u256Add (held s) amount) (earned s) (cursor s))
-      (cons (Deposited (caller env) amount) nil))
+  fun (env : Env) (s : State) (amount : U256) => some (pair (makeState (owner s) (u256Add (held s) amount) (earned s) (cursor s)) (cons (Deposited (caller env) amount) nil))
 
 -- Entry: move the amount from held to earned and log the owner and the amount (event Withdrawn).
 -- Revert (none) when the amount is above held.
 def withdraw : (env : Env) -> (s : State) -> (amount : U256) -> Option (Prod State (List Out)) :=
-  fun (env : Env) (s : State) (amount : U256) =>
-    flagIf (u256Le amount (held s))
-      (some (pair (makeState (owner s) (u256Sub (held s) amount) (u256Add (earned s) amount) (cursor s))
-        (cons (Withdrawn (owner s) amount) nil)))
-      none
+  fun (env : Env) (s : State) (amount : U256) => flagIf (u256Le amount (held s)) (some (pair (makeState (owner s) (u256Sub (held s) amount) (u256Add (earned s) amount) (cursor s)) (cons (Withdrawn (owner s) amount) nil))) none
 
 -- Entry with no arguments: count the stamp (cursor + 1) and log held and earned (event Stamped).
 def stamp : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
-  fun (env : Env) (s : State) =>
-    some (pair (makeState (owner s) (held s) (earned s) (natAdd (cursor s) 1))
-      (cons (Stamped (held s) (earned s)) nil))
+  fun (env : Env) (s : State) => some (pair (makeState (owner s) (held s) (earned s) (natAdd (cursor s) 1)) (cons (Stamped (held s) (earned s)) nil))
 
 -- Helper (no Env): add to the history field earned.
 def checkpoint : State -> U256 -> State :=
   fun (s : State) (x : U256) => makeState (owner s) (held s) (u256Add (earned s) x) (cursor s)
+
 def checked : State := checkpoint init 7u
 
 -- View.

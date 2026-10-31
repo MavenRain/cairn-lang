@@ -1,13 +1,23 @@
 -- Law 6, no self constitution (S10 B1): the second part of p is a path of constitutions, not an aggregation,
 -- so e (payload p) does not check. The slots are those of gov-unit-wrong.lang.
 def Member : Type 0 := Sum Unit Unit
+
 def Choice : Type 0 := Sum Unit Unit
+
 def Outcome : Type 0 := Trunc0 Choice
+
 def Group : Type 0 := Sum Unit Unit
-def flip : Choice -> Choice := fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+
+def flip : Choice -> Choice :=
+  fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+
 def act : Group -> (Member -> Choice) -> Member -> Choice :=
   fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => flip (f m)) g
-def outcomeSet : isSet Outcome := fun (x : Outcome) (y : Outcome) (p : Path Outcome x y) (q : Path Outcome x y) => fun (i : I) => fun (j : I) => squash0 Choice x y p q i j
+
+def outcomeSet : isSet Outcome :=
+  fun (x : Outcome) (y : Outcome) (p : Path Outcome x y) (q : Path Outcome x y) (i : I) (j : I) => squash0 Choice x y p q i j
+
 def Not : Type 0 -> Type 0 := fun (X : Type 0) => X -> Empty
+
 def noSelfConWrong : (F : Constitution) -> Not Aggregation -> Not (Sigma (L : Aggregation) (Path Constitution (gov L) F)) :=
   fun (F : Constitution) (e : Not Aggregation) (p : Sigma (L : Aggregation) (Path Constitution (gov L) F)) => e (payload p)

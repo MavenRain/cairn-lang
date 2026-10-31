@@ -1,2 +1,3 @@
 -- No K: elim refuses a Path scrutinee, so no case can assume that a loop is refl.
-def bad : (p : Path Unit unit unit) -> Path (Path Unit unit unit) p refl := fun (p : Path Unit unit unit) => elim (fun (q : Path Unit unit unit) => Path (Path Unit unit unit) q refl) refl p
+def bad : (p : Path Unit unit unit) -> Path (Path Unit unit unit) p refl :=
+  fun (p : Path Unit unit unit) => elim (fun (q : Path Unit unit unit) => Path (Path Unit unit unit) q refl) refl p

@@ -2,4 +2,5 @@
 -- bagAssoc, bagComm, bagUnitL and bagSquash. This fold into Bag Size has
 -- no bagSquash case, so it has no isSet proof (S6, the missing coherence
 -- case).
-def f : Bag Size -> Bag Size := fun (b : Bag Size) => fold (fun (h : Size) => bagOf Size h) (bagUnit Size) (fun (l : Bag Size) (r : Bag Size) => bagOp Size l r) (fun (x : Bag Size) (y : Bag Size) (z : Bag Size) => fun (i : I) => bagAssoc Size x y z i) (fun (x : Bag Size) (y : Bag Size) => fun (i : I) => bagComm Size x y i) (fun (x : Bag Size) => fun (i : I) => bagUnitL Size x i) b
+def f : Bag Size -> Bag Size :=
+  fun (b : Bag Size) => fold (fun (h : Size) => bagOf Size h) (bagUnit Size) (fun (l : Bag Size) (r : Bag Size) => bagOp Size l r) (fun (x : Bag Size) (y : Bag Size) (z : Bag Size) (i : I) => bagAssoc Size x y z i) (fun (x : Bag Size) (y : Bag Size) (i : I) => bagComm Size x y i) (fun (x : Bag Size) (i : I) => bagUnitL Size x i) b

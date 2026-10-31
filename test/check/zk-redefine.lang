@@ -1,9 +1,18 @@
 def Member : Type 0 := Sum Unit Unit
+
 def Choice : Type 0 := Sum Unit Unit
+
 def Outcome : Type 0 := Trunc0 Unit
+
 def Group : Type 0 := Sum Unit Unit
-def flip : Choice -> Choice := fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+
+def flip : Choice -> Choice :=
+  fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+
 def act : Group -> (Member -> Choice) -> Member -> Choice :=
   fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => flip (f m)) g
-def outcomeSet : isSet Outcome := fun (x : Outcome) (y : Outcome) (p : Path Outcome x y) (q : Path Outcome x y) => fun (i : I) => fun (j : I) => squash0 Unit x y p q i j
+
+def outcomeSet : isSet Outcome :=
+  fun (x : Outcome) (y : Outcome) (p : Path Outcome x y) (q : Path Outcome x y) (i : I) (j : I) => squash0 Unit x y p q i j
+
 def castPrivate : Unit := unit

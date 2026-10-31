@@ -1,2 +1,3 @@
 -- elim refuses a wrong case count: Sum A B has two constructors, so elim on Sum needs a motive and two cases, here one case.
-def bad : Sum Unit Unit -> Unit := fun (s : Sum Unit Unit) => elim (fun (t : Sum Unit Unit) => Unit) (fun (a : Unit) => a) s
+def bad : Sum Unit Unit -> Unit :=
+  fun (s : Sum Unit Unit) => elim (fun (t : Sum Unit Unit) => Unit) (fun (a : Unit) => a) s

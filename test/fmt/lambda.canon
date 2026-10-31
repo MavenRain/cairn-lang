@@ -1,0 +1,7 @@
+def k2 : (A : Type 0) -> A -> A -> A := fun (A : Type 0) (x : A) (y : A) z => x
+
+def apply : (Nat -> Nat) -> Nat -> Nat := fun f n => f n
+
+def inner : Nat -> Nat := fun n => (fun m => m) n
+
+def arg : Nat -> Nat := fun n => natFold n (fun m k => natAdd m k)

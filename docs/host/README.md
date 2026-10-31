@@ -82,6 +82,7 @@ build/langc eval PROG NAME [ARGS...]
 build/langc ir PROG
 build/langc abi PROG
 build/langc build PROG -o OUT [--runtime]
+build/langc fmt PROG [--check]
 ```
 
 - `check` prints `ok`, or refuses the program.
@@ -92,6 +93,17 @@ build/langc build PROG -o OUT [--runtime]
 - `abi` prints the name of each entry, one for each line.
 - `build` writes the Wasm module to `OUT`. On this target, `--runtime`
   gives the same bytes.
+- `fmt` prints the canonical text of the program (S11, A1). It parses
+  `PROG` and does not check it, so it also accepts a program that `check`
+  refuses (`examples/algebra.lang`, `domain/domain.lang`). With
+  `--check`, `fmt` prints nothing and exits 0 when `PROG` is canonical.
+  Else it prints `PROG:LINE: not canonical` on stderr, where `LINE` is
+  the first line that is different, and exits 1. On a lex or parse error,
+  `fmt` writes the diagnostic on stderr, writes nothing on stdout and
+  exits 1. A usage error, an IO error or a full arena gives exit 2.
+  Before emitting text, `fmt` checks that it fits the source size limit
+  and reparses it. If the canonical spelling exceeds the size or parser
+  depth limit, `fmt` exits 1 with a diagnostic and no stdout output.
 
 The exit status is 0 for success, 1 for a refused program and 2 for a
 usage or IO error. A diagnostic on stderr has the form
@@ -179,6 +191,10 @@ what the domain holds and how to change it.
 | `test/ir wasm: 5 modules valid, 32 rows, 0 mismatches` | each `test/ir` module builds in `--kit` mode and is valid, and each row of the gate list gives the same result on `build/wasmtool` and in `langc --kit eval` |
 | `test/ir js: 32 rows, 0 mismatches` | each row of the `test/ir` gate list gives the same result on `build/jstool` and in `langc --kit eval` |
 | `json abi: 2 checked` | `langc --kit abi test/wasm/secp.lang` prints the JSON abi line (each kind is `nat`, `flag` or `u256`), and `abi` with a flag other than `--text` refuses `USAGE` |
+| `fmt canonical: 271 passed` | `langc fmt` gives the same bytes for each accepted `.lang` file of `domain/`, `examples/` and `test/*/` outside `test/fmt/`; each file that `langc fmt` refuses is in `test/fmt/refused.txt` (18 `test/parse` files), and no accepted file is |
+| `fmt round trip: 278 passed` | each accepted file (the 271 files and the 7 `test/fmt/*.lang` files) and its canonical text give the same `build/fronttool dump` (`test/fronttool.c`: one line for each node, with no line numbers and no comments) |
+| `fmt rows: 7 passed` | `langc fmt test/fmt/X.lang` gives the bytes of `test/fmt/X.canon` for each of the 7 rows |
+| `fmt check: 8 passed` | `langc fmt X.canon --check` exits 0 for each of the 7 rows, and `langc fmt test/fmt/check.lang --check` exits 1 with `test/fmt/check.lang:3: not canonical` |
 | `gate: 0 failures` | the sum of all failures |
 
 `make check` also runs `test/jstest.c` against an ES module with entries

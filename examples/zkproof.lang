@@ -8,15 +8,20 @@
 -- Opens from a transcript. The real proofs are host data (src/front/sigma.c).
 def Opens : (A : Type 0) -> Enc A -> A -> Type 0 :=
   fun (A : Type 0) (c : Enc A) (m : A) => ZKProof (Path A (decrypt A c) m)
+
 def OneHot : (C : Type 0) -> (C -> C -> Size) -> Enc (C -> Size) -> Type 0 :=
-  fun (C : Type 0) (ind : C -> C -> Size) (b : Enc (C -> Size)) =>
-  ZKProof ((i : C) * Path (C -> Size) (decrypt (C -> Size) b) (ind i))
+  fun (C : Type 0) (ind : C -> C -> Size) (b : Enc (C -> Size)) => ZKProof (Sigma (i : C) (Path (C -> Size) (decrypt (C -> Size) b) (ind i)))
+
 def lawZK : (W : Type 0) -> (p : ZKProof W) -> (q : ZKProof W) -> Path (ZKProof W) p q :=
-  fun (W : Type 0) (p : ZKProof W) (q : ZKProof W) => fun (i : I) => squash1 W p q i
+  fun (W : Type 0) (p : ZKProof W) (q : ZKProof W) (i : I) => squash1 W p q i
+
 def lawVerified : (W : Type 0) -> (w : W) -> Path (ZKProof W) (verified W (transcript W w)) (trunc1 W w) :=
   fun (W : Type 0) (w : W) => refl
+
 def lawOpens : (A : Type 0) -> (c : Enc A) -> (m : A) -> Transcript (Path A (decrypt A c) m) -> Opens A c m :=
   fun (A : Type 0) (c : Enc A) (m : A) (t : Transcript (Path A (decrypt A c) m)) => verified (Path A (decrypt A c) m) t
+
 def provedOne : ZKProof Size := verified Size (transcript Size (szS sz0))
+
 def provedRefl : Path (ZKProof Size) (verified Size (transcript Size (szS sz0))) (trunc1 Size (szS sz0)) :=
   lawVerified Size (szS sz0)

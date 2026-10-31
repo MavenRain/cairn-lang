@@ -1,0 +1,4 @@
+def fit : Nat := aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+def brk : Nat := bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+family Bit := zero | one
+family Color := red | green | blue | cyan | magenta | yellow | black | white | orange | purple | brownish

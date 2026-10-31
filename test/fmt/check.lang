@@ -1,0 +1,3 @@
+def one : Nat := 1
+
+def two : Nat :=  2

@@ -1,0 +1,13 @@
+state Vault := makeVault (owner : Addr) history (held paid : U256) (count : Nat)
+event Moved (to : Addr) (amount : U256)
+event Pinged
+cofamily Stream (A : Type 0) := sCorec (sHead : A) (sTail : Stream A)
+sealed family Box (A : Type 0) := boxOf (boxed : A)
+law def unbox : (A : Type 0) -> Box A -> A := fun A b => b
+family Tree := leaf | node (left : Tree) (right : Tree)
+
+and Sized : Tree -> Type 0 := sized (sizedOf : Tree) : Sized sizedOf
+family Circle := base | loop (i : I) [ ~i -> base, i -> base ]
+def meet : (A : Type 0) -> (p : I -> A) -> I -> I -> A := fun A p i j => p ((~i /\ j) \/ i)
+def cube : (A : Type 0) -> (a : A) -> Path A a a -> I -> I -> A := fun A a q i j => q @ (i /\ j)
+def fill : (A : Type 0) -> A -> I -> A := fun A a j => hcomp A (~j \/ j) (fun (i : I) => [ ~j -> a, j -> a ]) a

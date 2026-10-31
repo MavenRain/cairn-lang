@@ -1,5 +1,7 @@
 -- No K: loop composed with loop is not the loop. A path of paths
 -- between two different loops is not refl.
 def loopPath : Path S1 base base := fun (i : I) => loop i
+
 def loop2 : Path S1 base base := trans S1 base base base loopPath loopPath
+
 def bad : Path (Path S1 base base) loop2 loopPath := refl

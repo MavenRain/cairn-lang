@@ -1,102 +1,122 @@
 -- Law 6 (S10 B1): at beta 2/1 each phase is self constituting, so the regime is SI, and the refl end site
 -- refuses AD. The lines after this comment are examples/regimes.lang up to its laws.
 def Member : Type 0 := Sum Unit Unit
+
 def Choice : Type 0 := Sum Unit Unit
+
 -- The phases (O9): phaseZero is the reading at zero, phasePlus and phaseMinus the two readings away from zero.
 def Phase : Type 0 := Sum Unit (Sum Unit Unit)
+
 def Outcome : Type 0 := Phase
+
 def Group : Type 0 := Sum Unit Unit
 
-def flip : Choice -> Choice := fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+def flip : Choice -> Choice :=
+  fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
 
 def act : Group -> (Member -> Choice) -> Member -> Choice :=
   fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => flip (f m)) g
 
 -- Sets from loops: when each loop is refl, J on q gives isSet A.
 def setFromLoops : (A : Type 0) -> ((x : A) -> (p : Path A x x) -> Path (Path A x x) p refl) -> isSet A :=
-  fun (A : Type 0) (L : (x : A) -> (p : Path A x x) -> Path (Path A x x) p refl) (x : A) (y : A) (p : Path A x y) (q : Path A x y) =>
-    J A x (fun (z : A) (r : Path A x z) => (s : Path A x z) -> Path (Path A x z) s r) (L x) y q p
+  fun (A : Type 0) (L : (x : A) -> (p : Path A x x) -> Path (Path A x x) p refl) (x : A) (y : A) (p : Path A x y) (q : Path A x y) => J A x (fun (z : A) (r : Path A x z) => (s : Path A x z) -> Path (Path A x z) s r) (L x) y q p
 
 -- Unit is a set. normU replaces a path from unit by the path that elim gives, and J shows that the two are equal.
 def normU : (c : Unit) -> Path Unit unit c -> Path Unit unit c :=
   fun (c : Unit) (p : Path Unit unit c) => elim (fun (d : Unit) => Path Unit unit d) refl c
+
 def retrU : (c : Unit) -> (p : Path Unit unit c) -> Path (Path Unit unit c) p (normU c p) :=
   fun (c : Unit) (p : Path Unit unit c) => J Unit unit (fun (d : Unit) (r : Path Unit unit d) => Path (Path Unit unit d) r (normU d r)) refl c p
+
 def loopsU : (x : Unit) -> (p : Path Unit x x) -> Path (Path Unit x x) p refl :=
   fun (x : Unit) => elim (fun (y : Unit) => (p : Path Unit y y) -> Path (Path Unit y y) p refl) (fun (p : Path Unit unit unit) => retrU unit p) x
+
 def isSetUnit : isSet Unit := setFromLoops Unit loopsU
 
 -- Sum A B is a set when A and B are sets. normL sends a path from inl a to inl x through its A part (either with
 -- the default a) and keeps a path to inr b. On a loop at inl a, the A part is a loop in A, and isSet A makes it refl.
 def normL : (A : Type 0) -> (B : Type 0) -> (a : A) -> (c : Sum A B) -> Path (Sum A B) (inl a) c -> Path (Sum A B) (inl a) c :=
-  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inl a) d -> Path (Sum A B) (inl a) d)
-    (fun (x : A) (p : Path (Sum A B) (inl a) (inl x)) => fun (i : I) => inl (either (fun (y : A) => y) (fun (b : B) => a) (p @ i)))
-    (fun (b : B) (p : Path (Sum A B) (inl a) (inr b)) => p) c
+  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inl a) d -> Path (Sum A B) (inl a) d) (fun (x : A) (p : Path (Sum A B) (inl a) (inl x)) (i : I) => inl (either (fun (y : A) => y) (fun (b : B) => a) (p @ i))) (fun (b : B) (p : Path (Sum A B) (inl a) (inr b)) => p) c
+
 def retrL : (A : Type 0) -> (B : Type 0) -> (a : A) -> (c : Sum A B) -> (p : Path (Sum A B) (inl a) c) -> Path (Path (Sum A B) (inl a) c) p (normL A B a c p) :=
-  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) (p : Path (Sum A B) (inl a) c) =>
-    J (Sum A B) (inl a) (fun (d : Sum A B) (r : Path (Sum A B) (inl a) d) => Path (Path (Sum A B) (inl a) d) r (normL A B a d r)) refl c p
+  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) (p : Path (Sum A B) (inl a) c) => J (Sum A B) (inl a) (fun (d : Sum A B) (r : Path (Sum A B) (inl a) d) => Path (Path (Sum A B) (inl a) d) r (normL A B a d r)) refl c p
+
 def loopL : (A : Type 0) -> (B : Type 0) -> isSet A -> (a : A) -> (q : Path (Sum A B) (inl a) (inl a)) -> Path (Path (Sum A B) (inl a) (inl a)) q refl :=
-  fun (A : Type 0) (B : Type 0) (sA : isSet A) (a : A) (q : Path (Sum A B) (inl a) (inl a)) =>
-    trans (Path (Sum A B) (inl a) (inl a)) q (normL A B a (inl a) q) refl (retrL A B a (inl a) q)
-      (fun (j : I) => fun (i : I) => inl ((sA a a (fun (k : I) => either (fun (y : A) => y) (fun (b : B) => a) (q @ k)) refl @ j) @ i))
+  fun (A : Type 0) (B : Type 0) (sA : isSet A) (a : A) (q : Path (Sum A B) (inl a) (inl a)) => trans (Path (Sum A B) (inl a) (inl a)) q (normL A B a (inl a) q) refl (retrL A B a (inl a) q) (fun (j : I) (i : I) => inl (sA a a (fun (k : I) => either (fun (y : A) => y) (fun (b : B) => a) (q @ k)) refl @ j @ i))
+
 def normR : (A : Type 0) -> (B : Type 0) -> (b : B) -> (c : Sum A B) -> Path (Sum A B) (inr b) c -> Path (Sum A B) (inr b) c :=
-  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inr b) d -> Path (Sum A B) (inr b) d)
-    (fun (a : A) (p : Path (Sum A B) (inr b) (inl a)) => p)
-    (fun (x : B) (p : Path (Sum A B) (inr b) (inr x)) => fun (i : I) => inr (either (fun (a : A) => b) (fun (y : B) => y) (p @ i))) c
+  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inr b) d -> Path (Sum A B) (inr b) d) (fun (a : A) (p : Path (Sum A B) (inr b) (inl a)) => p) (fun (x : B) (p : Path (Sum A B) (inr b) (inr x)) (i : I) => inr (either (fun (a : A) => b) (fun (y : B) => y) (p @ i))) c
+
 def retrR : (A : Type 0) -> (B : Type 0) -> (b : B) -> (c : Sum A B) -> (p : Path (Sum A B) (inr b) c) -> Path (Path (Sum A B) (inr b) c) p (normR A B b c p) :=
-  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) (p : Path (Sum A B) (inr b) c) =>
-    J (Sum A B) (inr b) (fun (d : Sum A B) (r : Path (Sum A B) (inr b) d) => Path (Path (Sum A B) (inr b) d) r (normR A B b d r)) refl c p
+  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) (p : Path (Sum A B) (inr b) c) => J (Sum A B) (inr b) (fun (d : Sum A B) (r : Path (Sum A B) (inr b) d) => Path (Path (Sum A B) (inr b) d) r (normR A B b d r)) refl c p
+
 def loopR : (A : Type 0) -> (B : Type 0) -> isSet B -> (b : B) -> (q : Path (Sum A B) (inr b) (inr b)) -> Path (Path (Sum A B) (inr b) (inr b)) q refl :=
-  fun (A : Type 0) (B : Type 0) (sB : isSet B) (b : B) (q : Path (Sum A B) (inr b) (inr b)) =>
-    trans (Path (Sum A B) (inr b) (inr b)) q (normR A B b (inr b) q) refl (retrR A B b (inr b) q)
-      (fun (j : I) => fun (i : I) => inr ((sB b b (fun (k : I) => either (fun (a : A) => b) (fun (y : B) => y) (q @ k)) refl @ j) @ i))
+  fun (A : Type 0) (B : Type 0) (sB : isSet B) (b : B) (q : Path (Sum A B) (inr b) (inr b)) => trans (Path (Sum A B) (inr b) (inr b)) q (normR A B b (inr b) q) refl (retrR A B b (inr b) q) (fun (j : I) (i : I) => inr (sB b b (fun (k : I) => either (fun (a : A) => b) (fun (y : B) => y) (q @ k)) refl @ j @ i))
+
 def loopsSum : (A : Type 0) -> (B : Type 0) -> isSet A -> isSet B -> (x : Sum A B) -> (p : Path (Sum A B) x x) -> Path (Path (Sum A B) x x) p refl :=
-  fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) (x : Sum A B) =>
-    elim (fun (y : Sum A B) => (p : Path (Sum A B) y y) -> Path (Path (Sum A B) y y) p refl) (loopL A B sA) (loopR A B sB) x
+  fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) (x : Sum A B) => elim (fun (y : Sum A B) => (p : Path (Sum A B) y y) -> Path (Path (Sum A B) y y) p refl) (loopL A B sA) (loopR A B sB) x
+
 def isSetSum : (A : Type 0) -> (B : Type 0) -> isSet A -> isSet B -> isSet (Sum A B) :=
   fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) => setFromLoops (Sum A B) (loopsSum A B sA sB)
+
 -- The proof slot outcomeSet: Phase is a set, as a sum of sets.
-def outcomeSet : isSet Outcome := isSetSum Unit (Sum Unit Unit) isSetUnit (isSetSum Unit Unit isSetUnit isSetUnit)
+def outcomeSet : isSet Outcome :=
+  isSetSum Unit (Sum Unit Unit) isSetUnit (isSetSum Unit Unit isSetUnit isSetUnit)
 
 def phaseZero : Phase := inl unit
+
 def phasePlus : Phase := inr (inl unit)
+
 def phaseMinus : Phase := inr (inr unit)
 
 -- The regimes: AI (no self constituting outcome), AD (Arrow Debreu, one) and SI (Schelling Ising, more than one).
 def Regime : Type 0 := Sum Unit (Sum Unit Unit)
+
 def AI : Regime := inl unit
+
 def AD : Regime := inr (inl unit)
+
 def SI : Regime := inr (inr unit)
 
 -- same x y is inl unit when the choices x and y are equal, and eqPhase is the decidable equality of Phase.
 def same : Choice -> Choice -> Choice :=
   fun (x : Choice) (y : Choice) => either (fun (u : Unit) => y) (fun (u : Unit) => flip y) x
-def isZero : Phase -> Choice := fun (p : Phase) => either (fun (u : Unit) => inl unit) (fun (s : Sum Unit Unit) => inr unit) p
+
+def isZero : Phase -> Choice :=
+  fun (p : Phase) => either (fun (u : Unit) => inl unit) (fun (s : Sum Unit Unit) => inr unit) p
+
 def eqPhase : Phase -> Phase -> Choice :=
-  fun (x : Phase) (y : Phase) => either (fun (u : Unit) => isZero y)
-    (fun (a : Sum Unit Unit) => either (fun (u : Unit) => inr unit) (fun (b : Sum Unit Unit) => same a b) y) x
+  fun (x : Phase) (y : Phase) => either (fun (u : Unit) => isZero y) (fun (a : Sum Unit Unit) => either (fun (u : Unit) => inr unit) (fun (b : Sum Unit Unit) => same a b) y) x
 
 -- Beta is a pair of sizes, the numerator and the denominator (O9, USER ruling Q-S10-6 (a)). betaGt n d is inl unit
 -- when n is greater than d, by elim on n and then on d.
 def Beta : Type 0 := Sigma (betaNum : Size) Size
+
 def sizeOne : Size := szS sz0
+
 def sizeTwo : Size := szS (szS sz0)
+
 def betaGt : Size -> Size -> Choice :=
-  fun (n : Size) => elim (fun (k : Size) => Size -> Choice) (fun (d : Size) => inr unit)
-    (fun (k : Size) (ih : Size -> Choice) (d : Size) => elim (fun (j : Size) => Choice) (inl unit) (fun (j : Size) (jh : Choice) => ih j) d) n
+  fun (n : Size) => elim (fun (k : Size) => Size -> Choice) (fun (d : Size) => inr unit) (fun (k : Size) (ih : Size -> Choice) (d : Size) => elim (fun (j : Size) => Choice) (inl unit) (fun (j : Size) (jh : Choice) => ih j) d) n
+
 def b11 : Beta := pack sizeOne sizeOne
+
 def b21 : Beta := pack sizeTwo sizeOne
+
 def b12 : Beta := pack sizeOne sizeTwo
 
 -- A constant constitution: its rule gives o at each configuration, so refl is its invariance proof.
-def constCon : Outcome -> Constitution := fun (o : Outcome) => pack (fun (c : Config) => o) (fun (g : Group) (c : Config) => refl)
+def constCon : Outcome -> Constitution :=
+  fun (o : Outcome) => pack (fun (c : Config) => o) (fun (g : Group) (c : Config) => refl)
 
 -- The menus. menuAt b: for beta at most 1 each outcome selects the constant constitution at phaseZero, and for beta
 -- above 1 each phase selects the constant constitution at itself. cycleMenu: each phase selects the next phase.
 def menuAt : Beta -> Outcome -> Constitution :=
   fun (b : Beta) (o : Outcome) => either (fun (u : Unit) => constCon o) (fun (u : Unit) => constCon phaseZero) (betaGt (witness b) (payload b))
+
 def nextPhase : Phase -> Phase :=
   fun (p : Phase) => either (fun (u : Unit) => phasePlus) (fun (s : Sum Unit Unit) => either (fun (u : Unit) => phaseMinus) (fun (u : Unit) => phaseZero) s) p
+
 def cycleMenu : Outcome -> Constitution := fun (o : Outcome) => constCon (nextPhase o)
 
 -- The menu slot: the menu at beta 2/1.
@@ -106,19 +126,29 @@ def menu : Outcome -> Constitution := fun (o : Outcome) => menuAt b21 o
 -- regimeOf counts the self constituting phases up to two: bump moves AI to AD, and AD or SI to SI.
 def isFix : (Outcome -> Constitution) -> Tally -> Outcome -> Choice :=
   fun (M : Outcome -> Constitution) (t : Tally) (o : Outcome) => eqPhase (aggregate (M o) t) o
+
 def bump : Choice -> Regime -> Regime :=
   fun (c : Choice) (r : Regime) => either (fun (u : Unit) => either (fun (v : Unit) => AD) (fun (s : Sum Unit Unit) => SI) r) (fun (u : Unit) => r) c
+
 def regimeOf : (Outcome -> Constitution) -> Tally -> Regime :=
   fun (M : Outcome -> Constitution) (t : Tally) => bump (isFix M t phaseZero) (bump (isFix M t phasePlus) (bump (isFix M t phaseMinus) AI))
 
 -- The eval rows (test/eval/expect.txt) read these at the tally of allA.
 def allA : Member -> Choice := fun (m : Member) => inl unit
+
 def tallyA : Tally := orbitProj allA
+
 def regimeAt11 : Regime := regimeOf (menuAt b11) tallyA
+
 def regimeAt21 : Regime := regimeOf (menuAt b21) tallyA
+
 def regimeAt12 : Regime := regimeOf (menuAt b12) tallyA
+
 def regimeCycle : Regime := regimeOf cycleMenu tallyA
+
 def beta21 : Choice := betaGt sizeTwo sizeOne
+
 def beta11 : Choice := betaGt sizeOne sizeOne
 
-def forkWrong : (c : Config) -> Path Regime (regimeOf (menuAt b21) (orbitProj c)) AD := fun (c : Config) => refl
+def forkWrong : (c : Config) -> Path Regime (regimeOf (menuAt b21) (orbitProj c)) AD :=
+  fun (c : Config) => refl

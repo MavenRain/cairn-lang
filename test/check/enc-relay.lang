@@ -3,5 +3,6 @@
 -- accepted. relay takes its end point at i0; it is law-only only through the
 -- guest law-only def lawBody, and its codomain is Size.
 def lawBody : (c : Enc Size) -> Path Size sz0 sz0 :=
-  fun (c : Enc Size) => fun (i : I) => (fun (x : Size) => sz0) (decrypt Size c)
+  fun (c : Enc Size) (i : I) => (fun (x : Size) => sz0) (decrypt Size c)
+
 def relay : Enc Size -> Size := fun (c : Enc Size) => lawBody c @ i0

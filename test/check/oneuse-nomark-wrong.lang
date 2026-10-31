@@ -2,21 +2,36 @@
 -- variable ledger, and the refl end site of oneUseL refuses it. The lines after this comment are
 -- examples/oneuse.lang up to castOr, with that change, and oneUseL.
 def Member : Type 0 := Sum Unit Unit
+
 def Choice : Type 0 := Sum Unit Unit
+
 def Outcome : Type 0 := Trunc0 Choice
+
 def Group : Type 0 := Sum Unit Unit
-def flip : Choice -> Choice := fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+
+def flip : Choice -> Choice :=
+  fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+
 def act : Group -> (Member -> Choice) -> Member -> Choice :=
   fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => flip (f m)) g
-def outcomeSet : isSet Outcome := fun (x : Outcome) (y : Outcome) (p : Path Outcome x y) (q : Path Outcome x y) => fun (i : I) => fun (j : I) => squash0 Choice x y p q i j
-def keepCon : Constitution := pack (fun (c : Config) => trunc0 Choice (inl unit)) (fun (g : Group) (c : Config) => refl)
+
+def outcomeSet : isSet Outcome :=
+  fun (x : Outcome) (y : Outcome) (p : Path Outcome x y) (q : Path Outcome x y) (i : I) (j : I) => squash0 Choice x y p q i j
+
+def keepCon : Constitution :=
+  pack (fun (c : Config) => trunc0 Choice (inl unit)) (fun (g : Group) (c : Config) => refl)
+
 def menu : Outcome -> Constitution := fun (o : Outcome) => keepCon
 
 -- The key image of a member: one per member per poll (PLAN section 6), and the guest poll id is 0 (USER ruling Q5).
 def KeyImage : Type 0 := Member
+
 def keyA : KeyImage := inl unit
+
 def keyB : KeyImage := inr unit
+
 def yes : Choice := inl unit
+
 def no : Choice := inr unit
 
 -- same x y is inl unit when x and y are equal.
@@ -25,27 +40,35 @@ def same : Choice -> Choice -> Choice :=
 
 -- The ledger: the used map (a mark per key image) and the count of each choice, as the contract state (used, tally).
 def Mark : Type 0 := Sum Unit Unit
+
 def fresh : Mark := inl unit
+
 def spent : Mark := inr unit
+
 def Ledger : Type 0 := Sigma (used : KeyImage -> Mark) (Choice -> Size)
+
 def empty : Ledger := pack (fun (k : KeyImage) => fresh) (fun (c : Choice) => sz0)
 
 -- A cast gives a new ledger, or the revert: inl unit.
 def Result : Type 0 := Sum Unit Ledger
+
 def revert : Result := inl unit
-def accepted : Result -> Choice := fun (r : Result) => either (fun (u : Unit) => inr unit) (fun (l : Ledger) => inl unit) r
+
+def accepted : Result -> Choice :=
+  fun (r : Result) => either (fun (u : Unit) => inr unit) (fun (l : Ledger) => inl unit) r
 
 -- markAt k u marks k as spent in u. bumpAt c n adds one to the count of c in n.
 def markAt : KeyImage -> (KeyImage -> Mark) -> KeyImage -> Mark :=
   fun (k : KeyImage) (u : KeyImage -> Mark) (j : KeyImage) => either (fun (v : Unit) => spent) (fun (v : Unit) => u j) (same j k)
+
 def bumpAt : Choice -> (Choice -> Size) -> Choice -> Size :=
   fun (c : Choice) (n : Choice -> Size) (d : Choice) => either (fun (v : Unit) => szS (n d)) (fun (v : Unit) => n d) (same d c)
 
 -- castWith k c u n m: the cast of the key image k for the choice c at the ledger (u, n) when the mark of k is m.
 -- A fresh mark records k and counts c. A spent mark reverts.
 def castWith : KeyImage -> Choice -> (KeyImage -> Mark) -> (Choice -> Size) -> Mark -> Result :=
-  fun (k : KeyImage) (c : Choice) (u : KeyImage -> Mark) (n : Choice -> Size) (m : Mark) =>
-    either (fun (v : Unit) => inr (pack u (bumpAt c n))) (fun (v : Unit) => revert) m
+  fun (k : KeyImage) (c : Choice) (u : KeyImage -> Mark) (n : Choice -> Size) (m : Mark) => either (fun (v : Unit) => inr (pack u (bumpAt c n))) (fun (v : Unit) => revert) m
+
 def cast : KeyImage -> Choice -> Ledger -> Result :=
   fun (k : KeyImage) (c : Choice) (s : Ledger) => castWith k c (witness s) (payload s) (witness s k)
 
@@ -53,10 +76,9 @@ def cast : KeyImage -> Choice -> Ledger -> Result :=
 -- as the contract keeps its state.
 def andThen : Result -> (Ledger -> Result) -> Result :=
   fun (r : Result) (f : Ledger -> Result) => either (fun (u : Unit) => revert) f r
+
 def castOr : KeyImage -> Choice -> Ledger -> Ledger :=
   fun (k : KeyImage) (c : Choice) (s : Ledger) => either (fun (u : Unit) => s) (fun (l : Ledger) => l) (cast k c s)
 
 def oneUseL : (v : Unit) -> (c : Choice) -> (d : Choice) -> (s : Ledger) -> Path Result (andThen (cast (inl v) c s) (cast (inl v) d)) revert :=
-  fun (v : Unit) (c : Choice) (d : Choice) (s : Ledger) =>
-    elim (fun (m : Mark) => Path Result (andThen (castWith (inl v) c (witness s) (payload s) m) (cast (inl v) d)) revert)
-      (fun (w : Unit) => refl) (fun (w : Unit) => refl) (witness s (inl v))
+  fun (v : Unit) (c : Choice) (d : Choice) (s : Ledger) => elim (fun (m : Mark) => Path Result (andThen (castWith (inl v) c (witness s) (payload s) m) (cast (inl v) d)) revert) (fun (w : Unit) => refl) (fun (w : Unit) => refl) (witness s (inl v))

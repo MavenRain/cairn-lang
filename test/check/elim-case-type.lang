@@ -1,2 +1,3 @@
 -- elim refuses a case of the wrong type: the inl case must have the type (a : Unit) -> P (inl a), and P (inl a) is Sum Unit Unit, but the case gives Unit.
-def bad : Sum Unit Unit -> Sum Unit Unit := fun (s : Sum Unit Unit) => elim (fun (t : Sum Unit Unit) => Sum Unit Unit) (fun (a : Unit) => a) (fun (b : Unit) => inl b) s
+def bad : Sum Unit Unit -> Sum Unit Unit :=
+  fun (s : Sum Unit Unit) => elim (fun (t : Sum Unit Unit) => Sum Unit Unit) (fun (a : Unit) => a) (fun (b : Unit) => inl b) s

@@ -1,0 +1,6 @@
+def konst : (A B : Type 0) -> A -> B -> A := fun A => fun B => fun a => fun b => (a)
+def twice : (A : Type 0) -> (A -> A) -> A -> A := fun A f x => (f) ((f (x)))
+def Pairs : (A : Type 0) -> Type 0 := fun A => (x : A) * ((y : A) * (Path A x y))
+def Single : (A : Type 0) -> Type 0 := fun A => Sigma (x : A) (Path A x x)
+def wrap : (A : Type 0) -> A -> A := fun A a => konst A (Type 0) a ((Type 0))
+def corner : (A : Type 0) -> (p : I -> I -> A) -> I -> I -> A := fun A p i j => ((p @ i) @ j)

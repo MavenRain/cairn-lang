@@ -1,6 +1,5 @@
 -- No proof irrelevance (O17): the ua lines of one map with two
 -- equivalence proofs are Glue lines with different branches, so refl does
 -- not relate them.
-def bad : (A : Type 0) -> (f : A -> A) -> (p : isEquiv A A f) -> (q : isEquiv A A f) ->
-  Path (Path (Type 0) A A) (ua A A (pack f p)) (ua A A (pack f q)) :=
+def bad : (A : Type 0) -> (f : A -> A) -> (p : isEquiv A A f) -> (q : isEquiv A A f) -> Path (Path (Type 0) A A) (ua A A (pack f p)) (ua A A (pack f q)) :=
   fun (A : Type 0) (f : A -> A) (p : isEquiv A A f) (q : isEquiv A A f) => refl

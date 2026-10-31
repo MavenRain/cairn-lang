@@ -7,18 +7,15 @@
 -- sizeAdd and lawOp2 are copies from examples/enc.lang.
 def sizeAdd : Size -> Size -> Size :=
   fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
-def lawOp2 : (c1 : Enc Size) -> (c2 : Enc Size) ->
-  Path Size (decrypt Size (encOp2 Size Size Size sizeAdd c1 c2)) (sizeAdd (decrypt Size c1) (decrypt Size c2)) :=
-  fun (c1 : Enc Size) (c2 : Enc Size) =>
-  elim (fun (d1 : Enc Size) => Path Size (decrypt Size (encOp2 Size Size Size sizeAdd d1 c2)) (sizeAdd (decrypt Size d1) (decrypt Size c2)))
-    (fun (a : Size) => elim (fun (d2 : Enc Size) => Path Size (decrypt Size (encOp2 Size Size Size sizeAdd (encEta Size a) d2)) (sizeAdd a (decrypt Size d2)))
-      (fun (b : Size) => refl) c2) c1
-def lawOpen : (q : Quorum) -> (c : Enc Size) ->
-  Path Size (open Size q c) (decrypt Size c) :=
+
+def lawOp2 : (c1 : Enc Size) -> (c2 : Enc Size) -> Path Size (decrypt Size (encOp2 Size Size Size sizeAdd c1 c2)) (sizeAdd (decrypt Size c1) (decrypt Size c2)) :=
+  fun (c1 : Enc Size) (c2 : Enc Size) => elim (fun (d1 : Enc Size) => Path Size (decrypt Size (encOp2 Size Size Size sizeAdd d1 c2)) (sizeAdd (decrypt Size d1) (decrypt Size c2))) (fun (a : Size) => elim (fun (d2 : Enc Size) => Path Size (decrypt Size (encOp2 Size Size Size sizeAdd (encEta Size a) d2)) (sizeAdd a (decrypt Size d2))) (fun (b : Size) => refl) c2) c1
+
+def lawOpen : (q : Quorum) -> (c : Enc Size) -> Path Size (open Size q c) (decrypt Size c) :=
   fun (q : Quorum) (c : Enc Size) => refl
-def lawQuorum : (q : Quorum) -> (p : Quorum) -> (c : Enc Size) ->
-  Path Size (open Size q c) (open Size p c) :=
+
+def lawQuorum : (q : Quorum) -> (p : Quorum) -> (c : Enc Size) -> Path Size (open Size q c) (open Size p c) :=
   fun (q : Quorum) (p : Quorum) (c : Enc Size) => refl
-def lawTally : (q : Quorum) -> (c1 : Enc Size) -> (c2 : Enc Size) ->
-  Path Size (open Size q (encOp2 Size Size Size sizeAdd c1 c2)) (sizeAdd (open Size q c1) (open Size q c2)) :=
+
+def lawTally : (q : Quorum) -> (c1 : Enc Size) -> (c2 : Enc Size) -> Path Size (open Size q (encOp2 Size Size Size sizeAdd c1 c2)) (sizeAdd (open Size q c1) (open Size q c2)) :=
   fun (q : Quorum) (c1 : Enc Size) (c2 : Enc Size) => lawOp2 c1 c2

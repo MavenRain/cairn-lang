@@ -1,4 +1,7 @@
 def act : Unit -> (Unit -> Unit) -> Unit -> Unit := fun (g : Unit) (f : Unit -> Unit) => f
+
 def Member : Type 0 := Unit
+
 def Choice : Type 0 := Unit
+
 def Group : Type 0 := Unit

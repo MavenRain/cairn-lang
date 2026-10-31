@@ -1,2 +1,4 @@
-def hashw : (x y : U256) -> U256 := fun (x y : U256) => hash x y
-def hashIs : (x y z : U256) -> Flag := fun (x y z : U256) => u256Eq (hash x y) z
+def hashw : (x : U256) -> (y : U256) -> U256 := fun (x : U256) (y : U256) => hash x y
+
+def hashIs : (x : U256) -> (y : U256) -> (z : U256) -> Flag :=
+  fun (x : U256) (y : U256) (z : U256) => u256Eq (hash x y) z

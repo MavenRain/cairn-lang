@@ -2,7 +2,10 @@
 -- through an Opens proof argument. A def that opens the tally itself needs a
 -- Path or Trunc1 codomain, not Params.
 def Choice : Type 0 := Sum Unit Unit
+
 def Hist : Type 0 := Choice -> Size
+
 def Params : Type 0 := Size
+
 def decideOpen : Quorum -> Enc Hist -> Params :=
   fun (q : Quorum) (c : Enc Hist) => open Hist q c (inl unit)

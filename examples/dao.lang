@@ -1,85 +1,92 @@
 -- The DAO prelude (slice S7 B2, PLAN section 8), guest mode: the slots and act of orbit.lang, the proof slot outcomeSet and the menu slot.
 -- The kernel gives Orbit and orbitProj after act, and Config, Constitution, Aggregation, Tally, aggregate, gov and amend after outcomeSet.
 def Member : Type 0 := Sum Unit Unit
+
 def Choice : Type 0 := Sum Unit Unit
+
 def Outcome : Type 0 := Choice
+
 def Group : Type 0 := Sum Unit Unit
 
-def flip : Choice -> Choice := fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+def flip : Choice -> Choice :=
+  fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
 
 def act : Group -> (Member -> Choice) -> Member -> Choice :=
   fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => flip (f m)) g
 
 -- Sets from loops: when each loop is refl, J on q gives isSet A.
 def setFromLoops : (A : Type 0) -> ((x : A) -> (p : Path A x x) -> Path (Path A x x) p refl) -> isSet A :=
-  fun (A : Type 0) (L : (x : A) -> (p : Path A x x) -> Path (Path A x x) p refl) (x : A) (y : A) (p : Path A x y) (q : Path A x y) =>
-    J A x (fun (z : A) (r : Path A x z) => (s : Path A x z) -> Path (Path A x z) s r) (L x) y q p
+  fun (A : Type 0) (L : (x : A) -> (p : Path A x x) -> Path (Path A x x) p refl) (x : A) (y : A) (p : Path A x y) (q : Path A x y) => J A x (fun (z : A) (r : Path A x z) => (s : Path A x z) -> Path (Path A x z) s r) (L x) y q p
 
 -- Unit is a set. normU replaces a path from unit by the path that elim gives, and J shows that the two are equal.
 def normU : (c : Unit) -> Path Unit unit c -> Path Unit unit c :=
   fun (c : Unit) (p : Path Unit unit c) => elim (fun (d : Unit) => Path Unit unit d) refl c
+
 def retrU : (c : Unit) -> (p : Path Unit unit c) -> Path (Path Unit unit c) p (normU c p) :=
   fun (c : Unit) (p : Path Unit unit c) => J Unit unit (fun (d : Unit) (r : Path Unit unit d) => Path (Path Unit unit d) r (normU d r)) refl c p
+
 def loopsU : (x : Unit) -> (p : Path Unit x x) -> Path (Path Unit x x) p refl :=
   fun (x : Unit) => elim (fun (y : Unit) => (p : Path Unit y y) -> Path (Path Unit y y) p refl) (fun (p : Path Unit unit unit) => retrU unit p) x
+
 def isSetUnit : isSet Unit := setFromLoops Unit loopsU
 
 -- Sum A B is a set when A and B are sets. normL sends a path from inl a to inl x through its A part (either with
 -- the default a) and keeps a path to inr b. On a loop at inl a, the A part is a loop in A, and isSet A makes it refl.
 def normL : (A : Type 0) -> (B : Type 0) -> (a : A) -> (c : Sum A B) -> Path (Sum A B) (inl a) c -> Path (Sum A B) (inl a) c :=
-  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inl a) d -> Path (Sum A B) (inl a) d)
-    (fun (x : A) (p : Path (Sum A B) (inl a) (inl x)) => fun (i : I) => inl (either (fun (y : A) => y) (fun (b : B) => a) (p @ i)))
-    (fun (b : B) (p : Path (Sum A B) (inl a) (inr b)) => p) c
+  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inl a) d -> Path (Sum A B) (inl a) d) (fun (x : A) (p : Path (Sum A B) (inl a) (inl x)) (i : I) => inl (either (fun (y : A) => y) (fun (b : B) => a) (p @ i))) (fun (b : B) (p : Path (Sum A B) (inl a) (inr b)) => p) c
+
 def retrL : (A : Type 0) -> (B : Type 0) -> (a : A) -> (c : Sum A B) -> (p : Path (Sum A B) (inl a) c) -> Path (Path (Sum A B) (inl a) c) p (normL A B a c p) :=
-  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) (p : Path (Sum A B) (inl a) c) =>
-    J (Sum A B) (inl a) (fun (d : Sum A B) (r : Path (Sum A B) (inl a) d) => Path (Path (Sum A B) (inl a) d) r (normL A B a d r)) refl c p
+  fun (A : Type 0) (B : Type 0) (a : A) (c : Sum A B) (p : Path (Sum A B) (inl a) c) => J (Sum A B) (inl a) (fun (d : Sum A B) (r : Path (Sum A B) (inl a) d) => Path (Path (Sum A B) (inl a) d) r (normL A B a d r)) refl c p
+
 def loopL : (A : Type 0) -> (B : Type 0) -> isSet A -> (a : A) -> (q : Path (Sum A B) (inl a) (inl a)) -> Path (Path (Sum A B) (inl a) (inl a)) q refl :=
-  fun (A : Type 0) (B : Type 0) (sA : isSet A) (a : A) (q : Path (Sum A B) (inl a) (inl a)) =>
-    trans (Path (Sum A B) (inl a) (inl a)) q (normL A B a (inl a) q) refl (retrL A B a (inl a) q)
-      (fun (j : I) => fun (i : I) => inl ((sA a a (fun (k : I) => either (fun (y : A) => y) (fun (b : B) => a) (q @ k)) refl @ j) @ i))
+  fun (A : Type 0) (B : Type 0) (sA : isSet A) (a : A) (q : Path (Sum A B) (inl a) (inl a)) => trans (Path (Sum A B) (inl a) (inl a)) q (normL A B a (inl a) q) refl (retrL A B a (inl a) q) (fun (j : I) (i : I) => inl (sA a a (fun (k : I) => either (fun (y : A) => y) (fun (b : B) => a) (q @ k)) refl @ j @ i))
+
 def normR : (A : Type 0) -> (B : Type 0) -> (b : B) -> (c : Sum A B) -> Path (Sum A B) (inr b) c -> Path (Sum A B) (inr b) c :=
-  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inr b) d -> Path (Sum A B) (inr b) d)
-    (fun (a : A) (p : Path (Sum A B) (inr b) (inl a)) => p)
-    (fun (x : B) (p : Path (Sum A B) (inr b) (inr x)) => fun (i : I) => inr (either (fun (a : A) => b) (fun (y : B) => y) (p @ i))) c
+  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) => elim (fun (d : Sum A B) => Path (Sum A B) (inr b) d -> Path (Sum A B) (inr b) d) (fun (a : A) (p : Path (Sum A B) (inr b) (inl a)) => p) (fun (x : B) (p : Path (Sum A B) (inr b) (inr x)) (i : I) => inr (either (fun (a : A) => b) (fun (y : B) => y) (p @ i))) c
+
 def retrR : (A : Type 0) -> (B : Type 0) -> (b : B) -> (c : Sum A B) -> (p : Path (Sum A B) (inr b) c) -> Path (Path (Sum A B) (inr b) c) p (normR A B b c p) :=
-  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) (p : Path (Sum A B) (inr b) c) =>
-    J (Sum A B) (inr b) (fun (d : Sum A B) (r : Path (Sum A B) (inr b) d) => Path (Path (Sum A B) (inr b) d) r (normR A B b d r)) refl c p
+  fun (A : Type 0) (B : Type 0) (b : B) (c : Sum A B) (p : Path (Sum A B) (inr b) c) => J (Sum A B) (inr b) (fun (d : Sum A B) (r : Path (Sum A B) (inr b) d) => Path (Path (Sum A B) (inr b) d) r (normR A B b d r)) refl c p
+
 def loopR : (A : Type 0) -> (B : Type 0) -> isSet B -> (b : B) -> (q : Path (Sum A B) (inr b) (inr b)) -> Path (Path (Sum A B) (inr b) (inr b)) q refl :=
-  fun (A : Type 0) (B : Type 0) (sB : isSet B) (b : B) (q : Path (Sum A B) (inr b) (inr b)) =>
-    trans (Path (Sum A B) (inr b) (inr b)) q (normR A B b (inr b) q) refl (retrR A B b (inr b) q)
-      (fun (j : I) => fun (i : I) => inr ((sB b b (fun (k : I) => either (fun (a : A) => b) (fun (y : B) => y) (q @ k)) refl @ j) @ i))
+  fun (A : Type 0) (B : Type 0) (sB : isSet B) (b : B) (q : Path (Sum A B) (inr b) (inr b)) => trans (Path (Sum A B) (inr b) (inr b)) q (normR A B b (inr b) q) refl (retrR A B b (inr b) q) (fun (j : I) (i : I) => inr (sB b b (fun (k : I) => either (fun (a : A) => b) (fun (y : B) => y) (q @ k)) refl @ j @ i))
+
 def loopsSum : (A : Type 0) -> (B : Type 0) -> isSet A -> isSet B -> (x : Sum A B) -> (p : Path (Sum A B) x x) -> Path (Path (Sum A B) x x) p refl :=
-  fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) (x : Sum A B) =>
-    elim (fun (y : Sum A B) => (p : Path (Sum A B) y y) -> Path (Path (Sum A B) y y) p refl) (loopL A B sA) (loopR A B sB) x
+  fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) (x : Sum A B) => elim (fun (y : Sum A B) => (p : Path (Sum A B) y y) -> Path (Path (Sum A B) y y) p refl) (loopL A B sA) (loopR A B sB) x
+
 def isSetSum : (A : Type 0) -> (B : Type 0) -> isSet A -> isSet B -> isSet (Sum A B) :=
   fun (A : Type 0) (B : Type 0) (sA : isSet A) (sB : isSet B) => setFromLoops (Sum A B) (loopsSum A B sA sB)
+
 -- The proof slot outcomeSet (USER ruling S7 Q2): Outcome is a set. The kernel puts the DAO prelude directly after it.
 def outcomeSet : isSet Outcome := isSetSum Unit Unit isSetUnit isSetUnit
 
 def allA : Member -> Choice := fun (m : Member) => inl unit
+
 def allB : Member -> Choice := fun (m : Member) => inr unit
+
 def split : Member -> Choice := fun (m : Member) => m
 
 -- same x y is inl unit when x and y are equal and inr unit when not. No eta for Unit, so flipFlip needs elim on the payload too.
 def same : Choice -> Choice -> Choice :=
   fun (x : Choice) (y : Choice) => either (fun (u : Unit) => y) (fun (u : Unit) => flip y) x
+
 def flipFlip : (y : Choice) -> Path Choice (flip (flip y)) y :=
-  fun (y : Choice) => elim (fun (z : Choice) => Path Choice (flip (flip z)) z)
-    (fun (v : Unit) => elim (fun (w : Unit) => Path Choice (flip (flip (inl w))) (inl w)) refl v)
-    (fun (v : Unit) => elim (fun (w : Unit) => Path Choice (flip (flip (inr w))) (inr w)) refl v) y
+  fun (y : Choice) => elim (fun (z : Choice) => Path Choice (flip (flip z)) z) (fun (v : Unit) => elim (fun (w : Unit) => Path Choice (flip (flip (inl w))) (inl w)) refl v) (fun (v : Unit) => elim (fun (w : Unit) => Path Choice (flip (flip (inr w))) (inr w)) refl v) y
+
 def sameFlip : (x : Choice) -> (y : Choice) -> Path Choice (same (flip x) (flip y)) (same x y) :=
-  fun (x : Choice) (y : Choice) => elim (fun (z : Choice) => Path Choice (same (flip z) (flip y)) (same z y))
-    (fun (u : Unit) => flipFlip y) (fun (u : Unit) => refl) x
+  fun (x : Choice) (y : Choice) => elim (fun (z : Choice) => Path Choice (same (flip z) (flip y)) (same z y)) (fun (u : Unit) => flipFlip y) (fun (u : Unit) => refl) x
 
 -- agree0 c: do member inl unit and member inr unit make the same choice. act does not change it (elim on g).
-def agree0 : (Member -> Choice) -> Choice := fun (c : Member -> Choice) => same (c (inl unit)) (c (inr unit))
+def agree0 : (Member -> Choice) -> Choice :=
+  fun (c : Member -> Choice) => same (c (inl unit)) (c (inr unit))
+
 def agreeAct : (g : Group) -> (d : Member -> Choice) -> Path Choice (agree0 (act g d)) (agree0 d) :=
-  fun (g : Group) (d : Member -> Choice) => elim (fun (h : Group) => Path Choice (agree0 (act h d)) (agree0 d))
-    (fun (u : Unit) => refl) (fun (u : Unit) => sameFlip (d (inl unit)) (d (inr unit))) g
+  fun (g : Group) (d : Member -> Choice) => elim (fun (h : Group) => Path Choice (agree0 (act h d)) (agree0 d)) (fun (u : Unit) => refl) (fun (u : Unit) => sameFlip (d (inl unit)) (d (inr unit))) g
 
 -- Two constitutions. agreeAct is the invariance proof of agree0; keepCon has a constant rule, so refl is its proof.
 def agreeCon : Constitution := pack agree0 agreeAct
-def keepCon : Constitution := pack (fun (c : Config) => inl unit) (fun (g : Group) (c : Config) => refl)
+
+def keepCon : Constitution :=
+  pack (fun (c : Config) => inl unit) (fun (g : Group) (c : Config) => refl)
 
 -- The menu slot (USER ruling S7 Q3): the outcome selects the next constitution.
 def menu : Outcome -> Constitution :=
@@ -87,20 +94,28 @@ def menu : Outcome -> Constitution :=
 
 -- A tally is an orbit, and aggregate applies the rule of the constitution to a configuration of the orbit.
 def splitTally : Tally := orbitProj split
+
 def tallied : Outcome := aggregate agreeCon splitTally
+
 def talliedIs : Path Outcome tallied (inr unit) := refl
+
 def flippedTally : Outcome := aggregate agreeCon (orbitProj (act (inr unit) split))
+
 def nextRule : Outcome := witness (menu tallied) allA
+
 def amended : Outcome := amend (aggregate agreeCon) splitTally
+
 def amendedIs : Path Outcome amended tallied := refl
 
 -- The laws of the DAO (slice S7 B3, PLAN section 8). orbitRel is the relation of Orbit as the kernel writes it.
-def orbitRel : Config -> Config -> Type 0 := fun (c : Config) (d : Config) => Sigma (g : Group) (Path Config (act g d) c)
+def orbitRel : Config -> Config -> Type 0 :=
+  fun (c : Config) (d : Config) => Sigma (g : Group) (Path Config (act g d) c)
 
 -- Law 1, anonymity: aggregate F takes the same value on a configuration and on each act of it, by cong of aggregate F
 -- on the orbitEq path. The strong form is the invariance proof of F, as the fold rule gives the ends.
 def anon : (F : Constitution) -> (g : Group) -> (c : Config) -> Path Outcome (aggregate F (orbitProj (act g c))) (aggregate F (orbitProj c)) :=
-  fun (F : Constitution) (g : Group) (c : Config) => fun (i : I) => aggregate F (orbitEq (act g c) c (pack g refl) i)
+  fun (F : Constitution) (g : Group) (c : Config) (i : I) => aggregate F (orbitEq (act g c) c (pack g refl) i)
+
 def anonStrong : (F : Constitution) -> (g : Group) -> (c : Config) -> Path Outcome (aggregate F (orbitProj (act g c))) (aggregate F (orbitProj c)) :=
   fun (F : Constitution) (g : Group) (c : Config) => payload F g c
 
@@ -111,21 +126,10 @@ def unitLaw : (F : Constitution) -> Path (Config -> Outcome) (fun (c : Config) =
 -- A family of propositions over a path or a square has each PathP, as isProp to PathP of agda/cubical. The base carries
 -- the first end along the line by transp, and the tubes are the paths of hP from the base to each given side.
 def propOver : (X : Type 0) -> (P : X -> Type 0) -> ((x : X) -> isProp (P x)) -> (a : X) -> (b : X) -> (q : Path X a b) -> (u : P a) -> (v : P b) -> PathP (fun (i : I) => P (q @ i)) u v :=
-  fun (X : Type 0) (P : X -> Type 0) (hP : (x : X) -> isProp (P x)) (a : X) (b : X) (q : Path X a b) (u : P a) (v : P b) =>
-    fun (i : I) => hcomp (P (q @ i)) (~i \/ i) (fun (k : I) => [
-      ~i -> hP (q @ i) (transp (fun (m : I) => P (q @ (i /\ m))) i0 u) u @ k,
-      i -> hP (q @ i) (transp (fun (m : I) => P (q @ (i /\ m))) i0 u) v @ k ]) (transp (fun (m : I) => P (q @ (i /\ m))) i0 u)
-def propSquare : (X : Type 0) -> (P : X -> Type 0) -> ((x : X) -> isProp (P x)) -> (x : X) -> (y : X) -> (p : Path X x y) -> (q : Path X x y) -> (s : Path (Path X x y) p q) ->
-  (ihx : P x) -> (ihy : P y) -> (ihp : PathP (fun (j : I) => P (p @ j)) ihx ihy) -> (ihq : PathP (fun (j : I) => P (q @ j)) ihx ihy) ->
-  PathP (fun (i : I) => PathP (fun (j : I) => P ((s @ i) @ j)) ihx ihy) ihp ihq :=
-  fun (X : Type 0) (P : X -> Type 0) (hP : (x : X) -> isProp (P x)) (x : X) (y : X) (p : Path X x y) (q : Path X x y) (s : Path (Path X x y) p q)
-    (ihx : P x) (ihy : P y) (ihp : PathP (fun (j : I) => P (p @ j)) ihx ihy) (ihq : PathP (fun (j : I) => P (q @ j)) ihx ihy) =>
-    fun (i : I) => fun (j : I) => hcomp (P ((s @ i) @ j)) (~i \/ i \/ ~j \/ j) (fun (k : I) => [
-      ~i -> hP ((s @ i) @ j) (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx) (ihp @ j) @ k,
-      i -> hP ((s @ i) @ j) (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx) (ihq @ j) @ k,
-      ~j -> hP ((s @ i) @ j) (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx) ihx @ k,
-      j -> hP ((s @ i) @ j) (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx) ihy @ k ])
-      (transp (fun (m : I) => P ((s @ (i /\ m)) @ (j /\ m))) i0 ihx)
+  fun (X : Type 0) (P : X -> Type 0) (hP : (x : X) -> isProp (P x)) (a : X) (b : X) (q : Path X a b) (u : P a) (v : P b) (i : I) => hcomp (P (q @ i)) (~i \/ i) (fun (k : I) => [ ~i -> hP (q @ i) (transp (fun (m : I) => P (q @ (i /\ m))) i0 u) u @ k, i -> hP (q @ i) (transp (fun (m : I) => P (q @ (i /\ m))) i0 u) v @ k ]) (transp (fun (m : I) => P (q @ (i /\ m))) i0 u)
+
+def propSquare : (X : Type 0) -> (P : X -> Type 0) -> ((x : X) -> isProp (P x)) -> (x : X) -> (y : X) -> (p : Path X x y) -> (q : Path X x y) -> (s : Path (Path X x y) p q) -> (ihx : P x) -> (ihy : P y) -> (ihp : PathP (fun (j : I) => P (p @ j)) ihx ihy) -> (ihq : PathP (fun (j : I) => P (q @ j)) ihx ihy) -> PathP (fun (i : I) => PathP (fun (j : I) => P (s @ i @ j)) ihx ihy) ihp ihq :=
+  fun (X : Type 0) (P : X -> Type 0) (hP : (x : X) -> isProp (P x)) (x : X) (y : X) (p : Path X x y) (q : Path X x y) (s : Path (Path X x y) p q) (ihx : P x) (ihy : P y) (ihp : PathP (fun (j : I) => P (p @ j)) ihx ihy) (ihq : PathP (fun (j : I) => P (q @ j)) ihx ihy) (i : I) (j : I) => hcomp (P (s @ i @ j)) (~i \/ i \/ ~j \/ j) (fun (k : I) => [ ~i -> hP (s @ i @ j) (transp (fun (m : I) => P (s @ (i /\ m) @ (j /\ m))) i0 ihx) (ihp @ j) @ k, i -> hP (s @ i @ j) (transp (fun (m : I) => P (s @ (i /\ m) @ (j /\ m))) i0 ihx) (ihq @ j) @ k, ~j -> hP (s @ i @ j) (transp (fun (m : I) => P (s @ (i /\ m) @ (j /\ m))) i0 ihx) ihx @ k, j -> hP (s @ i @ j) (transp (fun (m : I) => P (s @ (i /\ m) @ (j /\ m))) i0 ihx) ihy @ k ]) (transp (fun (m : I) => P (s @ (i /\ m) @ (j /\ m))) i0 ihx)
 
 -- Law 2, uniqueness: an aggregation L that agrees with the rule of F after orbitProj is aggregate F. orbitExt is elim
 -- on Orbit (O21) into the family of propositions Path Outcome (L z) (M z), for two aggregations that agree after
@@ -133,26 +137,16 @@ def propSquare : (X : Type 0) -> (P : X -> Type 0) -> ((x : X) -> isProp (P x)) 
 -- and M are variables, so the motive does not unfold aggregate at the orbitSquash case. desc is the path lambda over
 -- orbitExt at M = aggregate F, where h converts by the fold rule and eta.
 def orbitExt : isSet Outcome -> (L : Aggregation) -> (M : Aggregation) -> Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (fun (c : Config) => M (orbitProj c)) -> (x : Orbit) -> Path Outcome (L x) (M x) :=
-  fun (sO : isSet Outcome) (L : Aggregation) (M : Aggregation) (h : Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (fun (c : Config) => M (orbitProj c))) (x : Orbit) =>
-    elim (fun (z : Orbit) => Path Outcome (L z) (M z))
-      (fun (a : Config) => fun (k : I) => (h @ k) a)
-      (fun (a : Config) (b : Config) (r : orbitRel a b) => fun (i : I) =>
-        propOver Orbit (fun (z : Orbit) => Path Outcome (L z) (M z)) (fun (z : Orbit) => sO (L z) (M z))
-          (orbitProj a) (orbitProj b) (fun (k : I) => orbitEq a b r k) (fun (k : I) => (h @ k) a) (fun (k : I) => (h @ k) b) @ i)
-      (fun (w : Orbit) (ihw : Path Outcome (L w) (M w)) (y : Orbit) (ihy : Path Outcome (L y) (M y))
-        (p : Path Orbit w y) (ihp : PathP (fun (j : I) => Path Outcome (L (p @ j)) (M (p @ j))) ihw ihy)
-        (q : Path Orbit w y) (ihq : PathP (fun (j : I) => Path Outcome (L (q @ j)) (M (q @ j))) ihw ihy) =>
-        fun (i : I) => fun (j : I) => (propSquare Orbit (fun (z : Orbit) => Path Outcome (L z) (M z)) (fun (z : Orbit) => sO (L z) (M z))
-          w y p q (fun (m : I) => fun (n : I) => orbitSquash w y p q m n) ihw ihy ihp ihq @ i) @ j) x
+  fun (sO : isSet Outcome) (L : Aggregation) (M : Aggregation) (h : Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (fun (c : Config) => M (orbitProj c))) (x : Orbit) => elim (fun (z : Orbit) => Path Outcome (L z) (M z)) (fun (a : Config) (k : I) => (h @ k) a) (fun (a : Config) (b : Config) (r : orbitRel a b) (i : I) => propOver Orbit (fun (z : Orbit) => Path Outcome (L z) (M z)) (fun (z : Orbit) => sO (L z) (M z)) (orbitProj a) (orbitProj b) (fun (k : I) => orbitEq a b r k) (fun (k : I) => (h @ k) a) (fun (k : I) => (h @ k) b) @ i) (fun (w : Orbit) (ihw : Path Outcome (L w) (M w)) (y : Orbit) (ihy : Path Outcome (L y) (M y)) (p : Path Orbit w y) (ihp : PathP (fun (j : I) => Path Outcome (L (p @ j)) (M (p @ j))) ihw ihy) (q : Path Orbit w y) (ihq : PathP (fun (j : I) => Path Outcome (L (q @ j)) (M (q @ j))) ihw ihy) (i : I) (j : I) => propSquare Orbit (fun (z : Orbit) => Path Outcome (L z) (M z)) (fun (z : Orbit) => sO (L z) (M z)) w y p q (fun (m : I) (n : I) => orbitSquash w y p q m n) ihw ihy ihp ihq @ i @ j) x
+
 def desc : (F : Constitution) -> (L : Aggregation) -> Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (witness F) -> Path Aggregation L (aggregate F) :=
-  fun (F : Constitution) (L : Aggregation) (h : Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (witness F)) =>
-    fun (i : I) => fun (x : Orbit) => orbitExt outcomeSet L (aggregate F) h x @ i
+  fun (F : Constitution) (L : Aggregation) (h : Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (witness F)) (i : I) (x : Orbit) => orbitExt outcomeSet L (aggregate F) h x @ i
 
 -- Law 3, self constitution: gov (aggregate F) is F. The rules convert (the fold rule and eta), and the invariance
 -- proofs are equal by isPropInv, a guest lemma from outcomeSet: no PathP and no connection.
 def isPropInv : (F : Config -> Outcome) -> isProp ((g : Group) -> (c : Config) -> Path Outcome (F (act g c)) (F c)) :=
-  fun (F : Config -> Outcome) (u : (g : Group) -> (c : Config) -> Path Outcome (F (act g c)) (F c)) (v : (g : Group) -> (c : Config) -> Path Outcome (F (act g c)) (F c)) =>
-    fun (i : I) => fun (g : Group) (c : Config) => outcomeSet (F (act g c)) (F c) (u g c) (v g c) @ i
+  fun (F : Config -> Outcome) (u : (g : Group) -> (c : Config) -> Path Outcome (F (act g c)) (F c)) (v : (g : Group) -> (c : Config) -> Path Outcome (F (act g c)) (F c)) (i : I) (g : Group) (c : Config) => outcomeSet (F (act g c)) (F c) (u g c) (v g c) @ i
+
 def selfCon : (F : Constitution) -> Sigma (L : Aggregation) (Path Constitution (gov L) F) :=
   fun (F : Constitution) => pack (aggregate F) (fun (i : I) => pack (witness F) (isPropInv (witness F) (payload (gov (aggregate F))) (payload F) @ i))
 
@@ -160,47 +154,60 @@ def selfCon : (F : Constitution) -> Sigma (L : Aggregation) (Path Constitution (
 -- the first, by cong of aggregate on the law 3 path from gov (amend L) to gov L.
 def amendLaw : (F : Constitution) -> Path Aggregation (amend (aggregate F)) (aggregate (gov (aggregate F))) :=
   fun (F : Constitution) => refl
+
 def amendTwice : (L : Aggregation) -> Path Aggregation (amend (amend L)) (amend L) :=
-  fun (L : Aggregation) => fun (i : I) => aggregate (payload (selfCon (gov L)) @ i)
+  fun (L : Aggregation) (i : I) => aggregate (payload (selfCon (gov L)) @ i)
 
 -- Aggregation is a set, pointwise from outcomeSet.
 def isSetAgg : isSet Aggregation :=
-  fun (f : Aggregation) (g : Aggregation) (p : Path Aggregation f g) (q : Path Aggregation f g) =>
-    fun (i : I) => fun (j : I) => fun (z : Orbit) => (outcomeSet (f z) (g z) (fun (k : I) => (p @ k) z) (fun (k : I) => (q @ k) z) @ i) @ j
+  fun (f : Aggregation) (g : Aggregation) (p : Path Aggregation f g) (q : Path Aggregation f g) (i : I) (j : I) (z : Orbit) => outcomeSet (f z) (g z) (fun (k : I) => (p @ k) z) (fun (k : I) => (q @ k) z) @ i @ j
 
 -- The Charter history fold: genesis is the aggregation of agreeCon, and an adoption amends the folded base. The
 -- adoptTwice case is sym (amendTwice b), law 4 in the type. Ratified folds into Unit.
 def history : Charter -> Aggregation :=
-  fun (c : Charter) => fold Aggregation Unit
-    (aggregate agreeCon)
-    (fun (b : Aggregation) (r : Unit) => amend b)
-    (fun (b : Aggregation) (w : Size) => fun (i : I) => sym (amendTwice b) @ i)
-    (fun (x : Aggregation) (y : Aggregation) (p : Path Aggregation x y) (q : Path Aggregation x y) => fun (i : I) => fun (j : I) => (isSetAgg x y p q @ i) @ j)
-    (fun (b : Aggregation) (w : Size) => unit)
-    (fun (a : Aggregation) (x : Unit) (y : Unit) (p : Path Unit x y) (q : Path Unit x y) => fun (i : I) => fun (j : I) => (isSetUnit x y p q @ i) @ j) c
+  fun (c : Charter) => fold Aggregation Unit (aggregate agreeCon) (fun (b : Aggregation) (r : Unit) => amend b) (fun (b : Aggregation) (w : Size) (i : I) => sym (amendTwice b) @ i) (fun (x : Aggregation) (y : Aggregation) (p : Path Aggregation x y) (q : Path Aggregation x y) (i : I) (j : I) => isSetAgg x y p q @ i @ j) (fun (b : Aggregation) (w : Size) => unit) (fun (a : Aggregation) (x : Unit) (y : Unit) (p : Path Unit x y) (q : Path Unit x y) (i : I) (j : I) => isSetUnit x y p q @ i @ j) c
+
 def charterOne : Charter := adopt genesis (ratify genesis sz0)
+
 def historyOne : Outcome := history charterOne splitTally
+
 def historyOneIs : Path Outcome historyOne tallied := refl
+
 def b0 : Ballot_priv := castPrivate (inl unit) (inr unit)
+
 def w0 : ZKWitness := proveZK b0
+
 def c0 : Choice := project b0
+
 def complete : Path (Type 0) (verifyZK w0 c0 splitTally) Unit := refl
 
 -- The S9 B2 differential (test/contract/diff.txt): each menu entry on the canonical config of each histogram (allA,
 -- split and allB, the writer order) and on the member swap of it. The host and the EVM rows give the same words.
 def swapped : (Member -> Choice) -> Member -> Choice :=
   fun (c : Member -> Choice) (m : Member) => c (either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) m)
+
 def agree20 : Outcome := aggregate (menu (inl unit)) (orbitProj allA)
+
 def agree20p : Outcome := aggregate (menu (inl unit)) (orbitProj (swapped allA))
+
 def agree11 : Outcome := aggregate (menu (inl unit)) (orbitProj split)
+
 def agree11p : Outcome := aggregate (menu (inl unit)) (orbitProj (swapped split))
+
 def agree02 : Outcome := aggregate (menu (inl unit)) (orbitProj allB)
+
 def agree02p : Outcome := aggregate (menu (inl unit)) (orbitProj (swapped allB))
+
 def keep20 : Outcome := aggregate (menu (inr unit)) (orbitProj allA)
+
 def keep20p : Outcome := aggregate (menu (inr unit)) (orbitProj (swapped allA))
+
 def keep11 : Outcome := aggregate (menu (inr unit)) (orbitProj split)
+
 def keep11p : Outcome := aggregate (menu (inr unit)) (orbitProj (swapped split))
+
 def keep02 : Outcome := aggregate (menu (inr unit)) (orbitProj allB)
+
 def keep02p : Outcome := aggregate (menu (inr unit)) (orbitProj (swapped allB))
 
 -- O26, member permutation invariance (S10 B3, USER ruling Q-S10-8 (a)): the tally forgets members, so each menu entry
@@ -208,20 +215,24 @@ def keep02p : Outcome := aggregate (menu (inr unit)) (orbitProj (swapped allB))
 -- the 2 members (keep, swap), and a permutation acts on a configuration by composition. inlU and inrU take a Unit
 -- payload to unit (no eta for Unit). agreePerm needs same symmetric (sameSym); keepPerm is refl.
 def MPerm : Type 0 := Sum Unit Unit
+
 def permute : MPerm -> Member -> Member :=
   fun (s : MPerm) (m : Member) => either (fun (u : Unit) => m) (fun (u : Unit) => either (fun (v : Unit) => inr unit) (fun (v : Unit) => inl unit) m) s
-def inlU : (v : Unit) -> Path Choice (inl v) (inl unit) := fun (v : Unit) => elim (fun (w : Unit) => Path Choice (inl w) (inl unit)) refl v
-def inrU : (v : Unit) -> Path Choice (inr v) (inr unit) := fun (v : Unit) => elim (fun (w : Unit) => Path Choice (inr w) (inr unit)) refl v
+
+def inlU : (v : Unit) -> Path Choice (inl v) (inl unit) :=
+  fun (v : Unit) => elim (fun (w : Unit) => Path Choice (inl w) (inl unit)) refl v
+
+def inrU : (v : Unit) -> Path Choice (inr v) (inr unit) :=
+  fun (v : Unit) => elim (fun (w : Unit) => Path Choice (inr w) (inr unit)) refl v
+
 def sameSym : (x : Choice) -> (y : Choice) -> Path Choice (same y x) (same x y) :=
-  fun (x : Choice) (y : Choice) => elim (fun (a : Choice) => Path Choice (same y a) (same a y))
-    (fun (u : Unit) => elim (fun (b : Choice) => Path Choice (same b (inl u)) (same (inl u) b))
-      (fun (v : Unit) => trans Choice (inl u) (inl unit) (inl v) (inlU u) (sym (inlU v))) (fun (v : Unit) => sym (inrU v)) y)
-    (fun (u : Unit) => elim (fun (b : Choice) => Path Choice (same b (inr u)) (same (inr u) b))
-      (fun (v : Unit) => inrU u) (fun (v : Unit) => refl) y) x
+  fun (x : Choice) (y : Choice) => elim (fun (a : Choice) => Path Choice (same y a) (same a y)) (fun (u : Unit) => elim (fun (b : Choice) => Path Choice (same b (inl u)) (same (inl u) b)) (fun (v : Unit) => trans Choice (inl u) (inl unit) (inl v) (inlU u) (sym (inlU v))) (fun (v : Unit) => sym (inrU v)) y) (fun (u : Unit) => elim (fun (b : Choice) => Path Choice (same b (inr u)) (same (inr u) b)) (fun (v : Unit) => inrU u) (fun (v : Unit) => refl) y) x
+
 def agreePerm : (s : MPerm) -> (c : Config) -> Path Outcome (witness (menu (inl unit)) (fun (m : Member) => c (permute s m))) (witness (menu (inl unit)) c) :=
-  fun (s : MPerm) (c : Config) => elim (fun (t : MPerm) => Path Outcome (witness (menu (inl unit)) (fun (m : Member) => c (permute t m))) (witness (menu (inl unit)) c))
-    (fun (u : Unit) => refl) (fun (u : Unit) => sameSym (c (inl unit)) (c (inr unit))) s
+  fun (s : MPerm) (c : Config) => elim (fun (t : MPerm) => Path Outcome (witness (menu (inl unit)) (fun (m : Member) => c (permute t m))) (witness (menu (inl unit)) c)) (fun (u : Unit) => refl) (fun (u : Unit) => sameSym (c (inl unit)) (c (inr unit))) s
+
 def keepPerm : (s : MPerm) -> (c : Config) -> Path Outcome (witness (menu (inr unit)) (fun (m : Member) => c (permute s m))) (witness (menu (inr unit)) c) :=
   fun (s : MPerm) (c : Config) => refl
+
 -- The eval row: member 0 of split after the swap is the choice of member 1.
 def permSwap0 : Choice := split (permute (inr unit) (inl unit))

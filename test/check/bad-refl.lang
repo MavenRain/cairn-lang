@@ -1,2 +1,3 @@
 def price : Nat := 1200
+
 def wrong : Path Nat (natAdd price 1) price := refl

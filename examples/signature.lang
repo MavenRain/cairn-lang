@@ -1,14 +1,19 @@
 -- The design signature slots (slice S3, PLAN section 3), guest mode: the four type slots from formers and act at its slot type.
 -- act g flips the choice of every member when g is inr (the Z2 flip of the reference group) and keeps it when g is inl.
 def Member : Type 0 := Sum Unit Unit
+
 def Choice : Type 0 := Sum Unit Unit
+
 def Outcome : Type 0 := Choice
+
 def Group : Type 0 := Sum Unit Unit
 
-def flip : Choice -> Choice := fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+def flip : Choice -> Choice :=
+  fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
 
 def act : Group -> (Member -> Choice) -> Member -> Choice :=
   fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => flip (f m)) g
 
 def flipped : Choice := act (inr unit) (fun (m : Member) => inl unit) (inl unit)
+
 def kept : Choice := act (inl unit) (fun (m : Member) => inl unit) (inl unit)

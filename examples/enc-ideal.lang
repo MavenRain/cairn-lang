@@ -6,11 +6,19 @@
 -- (3 of 3) open one tally to one value.
 def sizeAdd : Size -> Size -> Size :=
   fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
+
 def encOne : Enc Size := encEta Size (szS sz0)
+
 def encSum : Enc Size := encOp2 Size Size Size sizeAdd encOne encOne
+
 def openSum : Size := decrypt Size encSum
+
 def openOne : Size := encOf encOne
+
 def seenSum : Trunc1 Size := observe Size encSum
+
 def encThree : Enc Size := encOp2 Size Size Size sizeAdd encOne encSum
+
 def openQ : Size := open Size (quorum (szS (szS sz0)) (szS (szS (szS sz0)))) encThree
+
 def openP : Size := open Size (quorum (szS (szS (szS sz0))) (szS (szS (szS sz0)))) encThree

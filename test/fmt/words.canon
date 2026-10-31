@@ -1,0 +1,15 @@
+def small : U256 := 42u
+
+def zero : U256 := 0u
+
+def zeros : U256 := 7u
+
+def hexsmall : U256 := 255u
+
+def upper : U256 := 3735928559u
+
+def big : U256 := 0x10000000000000000u
+
+def bighex : U256 := 0xffffffffffffffffffu
+
+def who : Addr := 0x00000000000000000000000000000000000000ab

@@ -3,10 +3,4 @@
 -- gives only the target of Charter, so it has one argument too few (S6,
 -- the arity test of fold_block).
 def f : Charter -> Trunc0 Size :=
-  fun (c : Charter) => fold (Trunc0 Size)
-    (trunc0 Size sz0)
-    (fun (b : Trunc0 Size) (r : Trunc0 Size) => trunc0 Size (szS sz0))
-    (fun (b : Trunc0 Size) (w : Size) => fun (i : I) => trunc0 Size (szS sz0))
-    (fun (x : Trunc0 Size) (y : Trunc0 Size) (p : Path (Trunc0 Size) x y) (q : Path (Trunc0 Size) x y) => fun (i : I) => fun (j : I) => squash0 Size x y p q i j)
-    (fun (b : Trunc0 Size) (w : Size) => b)
-    (fun (a : Trunc0 Size) (x : Trunc0 Size) (y : Trunc0 Size) (p : Path (Trunc0 Size) x y) (q : Path (Trunc0 Size) x y) => fun (i : I) => fun (j : I) => squash0 Size x y p q i j) c
+  fun (c : Charter) => fold (Trunc0 Size) (trunc0 Size sz0) (fun (b : Trunc0 Size) (r : Trunc0 Size) => trunc0 Size (szS sz0)) (fun (b : Trunc0 Size) (w : Size) (i : I) => trunc0 Size (szS sz0)) (fun (x : Trunc0 Size) (y : Trunc0 Size) (p : Path (Trunc0 Size) x y) (q : Path (Trunc0 Size) x y) (i : I) (j : I) => squash0 Size x y p q i j) (fun (b : Trunc0 Size) (w : Size) => b) (fun (a : Trunc0 Size) (x : Trunc0 Size) (y : Trunc0 Size) (p : Path (Trunc0 Size) x y) (q : Path (Trunc0 Size) x y) (i : I) (j : I) => squash0 Size x y p q i j) c

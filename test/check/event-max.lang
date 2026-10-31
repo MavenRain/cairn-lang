@@ -1,2 +1,2 @@
 -- An event has 32 fields or fewer, as an entry has (slice K4a1; 16 before sealed-lang S2, R23).
-event Big (a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1 c1 d1 e1 f1 g1 : Nat)
+event Big (a : Nat) (b : Nat) (c : Nat) (d : Nat) (e : Nat) (f : Nat) (g : Nat) (h : Nat) (i : Nat) (j : Nat) (k : Nat) (l : Nat) (m : Nat) (n : Nat) (o : Nat) (p : Nat) (q : Nat) (r : Nat) (s : Nat) (t : Nat) (u : Nat) (v : Nat) (w : Nat) (x : Nat) (y : Nat) (z : Nat) (a1 : Nat) (b1 : Nat) (c1 : Nat) (d1 : Nat) (e1 : Nat) (f1 : Nat) (g1 : Nat)

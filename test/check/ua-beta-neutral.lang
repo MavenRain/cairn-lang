@@ -2,4 +2,4 @@
 -- stays stuck, so uaBeta does not hold by refl. (At closed values of Fin n
 -- it holds: see uaBetaPlus3 in examples/glue.lang.)
 def bad : (A : Type 0) -> (B : Type 0) -> (e : Equiv A B) -> (x : A) -> Path B (transport A B (ua A B e) x) (witness e x) :=
-  fun (A : Type 0) => fun (B : Type 0) => fun (e : Equiv A B) => fun (x : A) => refl
+  fun (A : Type 0) (B : Type 0) (e : Equiv A B) (x : A) => refl

@@ -1,3 +1,4 @@
 -- A run-time fmMul without a static fmEta side refuses (REFUSE_RUNTIME_TREE,
 -- cairn-lang S8, Q-S8-10), here under the fold of len.
-def t : (n : Nat) -> Nat := fun (n : Nat) => len Nat (fold (fun (m : FreeMon Nat) => fmMul Nat m m) (fmUnit Nat) n)
+def t : (n : Nat) -> Nat :=
+  fun (n : Nat) => len Nat (fold (fun (m : FreeMon Nat) => fmMul Nat m m) (fmUnit Nat) n)

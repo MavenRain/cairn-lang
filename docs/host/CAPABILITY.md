@@ -59,7 +59,7 @@ on 2026-10-08 on AArch64 Darwin.
   reason the Wasm differential uses the bounded, fixed rows in
   `test/eval/expect.txt`.
 - All memory of `langc` comes from one arena with a limit of 1 GiB
-  (`src/main.c:11`). A run that reaches it stops with `OOM`.
+  (`src/main.c:17`). A run that reaches it stops with `OOM`.
   `langc eval test/ir/spine.lang foldOnes 4294967296` stops with `OOM`.
 - The Wasm memory has a maximum of 16384 pages, which is 1 GiB
   (`src/wasm.c:27`). The allocator traps when `memory.grow` fails.

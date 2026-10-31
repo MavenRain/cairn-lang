@@ -50,10 +50,20 @@ typedef struct {
   int col;
 } Token;
 
-/* The last token is TOK_EOF. */
+/* A `--` comment to the end of its line, without trailing blanks. */
+typedef struct {
+  const char *text;
+  size_t len;
+  int line;
+  int col;
+} Comment;
+
+/* The last token is TOK_EOF. The comments are in source order. */
 typedef struct {
   const Token *items;
   size_t count;
+  const Comment *comments;
+  size_t comment_count;
 } TokenList;
 
 /* SOURCE names the input in diagnostics. Returns 1, or 0 after a diagnostic. */

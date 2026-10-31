@@ -1,43 +1,45 @@
 -- Kan operations (S2a): transp on closed, Pi and Sigma lines, the library
 -- transport, subst, J and JRefl, and the J rule at a closed type.
 def transportRefl : (A : Type 0) -> (a : A) -> Path A (transp (fun (_ : I) => A) i0 a) a :=
-  fun (A : Type 0) => fun (a : A) => fun (i : I) => transp (fun (_ : I) => A) i a
-def transportPi : (A0 : Type 0) -> (A1 : Type 0) -> (B0 : Type 0) -> (B1 : Type 0) ->
-  (pA : Path (Type 0) A0 A1) -> (pB : Path (Type 0) B0 B1) -> (f : A0 -> B0) ->
-  Path (A1 -> B1) (transp (fun (i : I) => (pA @ i) -> (pB @ i)) i0 f)
-    (fun (x : A1) => transport B0 B1 pB (f (transport A1 A0 (sym pA) x))) :=
-  fun (A0 : Type 0) => fun (A1 : Type 0) => fun (B0 : Type 0) => fun (B1 : Type 0) =>
-    fun (pA : Path (Type 0) A0 A1) => fun (pB : Path (Type 0) B0 B1) => fun (f : A0 -> B0) => refl
-def transportSigma : (A0 : Type 0) -> (A1 : Type 0) -> (pA : Path (Type 0) A0 A1) -> (u : Sigma (x : A0) (Path A0 x x)) ->
-  Path (Sigma (x : A1) (Path A1 x x)) (transp (fun (i : I) => Sigma (x : pA @ i) (Path (pA @ i) x x)) i0 u)
-    (pack (transport A0 A1 pA (witness u))
-      (transp (fun (i : I) => Path (pA @ i) (transp (fun (j : I) => pA @ (i /\ j)) (~i) (witness u)) (transp (fun (j : I) => pA @ (i /\ j)) (~i) (witness u))) i0 (payload u))) :=
-  fun (A0 : Type 0) => fun (A1 : Type 0) => fun (pA : Path (Type 0) A0 A1) => fun (u : Sigma (x : A0) (Path A0 x x)) => refl
-def motive : (y : Nat) -> Path Nat 0 y -> Type 0 := fun (y : Nat) => fun (p : Path Nat 0 y) => Nat
+  fun (A : Type 0) (a : A) (i : I) => transp (fun (_ : I) => A) i a
+
+def transportPi : (A0 : Type 0) -> (A1 : Type 0) -> (B0 : Type 0) -> (B1 : Type 0) -> (pA : Path (Type 0) A0 A1) -> (pB : Path (Type 0) B0 B1) -> (f : A0 -> B0) -> Path (A1 -> B1) (transp (fun (i : I) => pA @ i -> pB @ i) i0 f) (fun (x : A1) => transport B0 B1 pB (f (transport A1 A0 (sym pA) x))) :=
+  fun (A0 : Type 0) (A1 : Type 0) (B0 : Type 0) (B1 : Type 0) (pA : Path (Type 0) A0 A1) (pB : Path (Type 0) B0 B1) (f : A0 -> B0) => refl
+
+def transportSigma : (A0 : Type 0) -> (A1 : Type 0) -> (pA : Path (Type 0) A0 A1) -> (u : Sigma (x : A0) (Path A0 x x)) -> Path (Sigma (x : A1) (Path A1 x x)) (transp (fun (i : I) => Sigma (x : pA @ i) (Path (pA @ i) x x)) i0 u) (pack (transport A0 A1 pA (witness u)) (transp (fun (i : I) => Path (pA @ i) (transp (fun (j : I) => pA @ (i /\ j)) ~i (witness u)) (transp (fun (j : I) => pA @ (i /\ j)) ~i (witness u))) i0 (payload u))) :=
+  fun (A0 : Type 0) (A1 : Type 0) (pA : Path (Type 0) A0 A1) (u : Sigma (x : A0) (Path A0 x x)) => refl
+
+def motive : (y : Nat) -> Path Nat 0 y -> Type 0 := fun (y : Nat) (p : Path Nat 0 y) => Nat
+
 def jNat : Nat := J Nat 0 motive 5 0 refl
+
 def jReflNat : Path Nat (J Nat 0 motive 5 0 refl) 5 := JRefl Nat 0 motive 5
+
 def trNat : Path Nat 3 3 := fun (i : I) => transp (fun (_ : I) => Nat) i 3
+
 def evPi : Nat := transp (fun (_ : I) => Nat -> Nat) i0 (fun (n : Nat) => natAdd n 1) 4
+
 def evPair : Nat := first (transp (fun (_ : I) => Prod Nat Nat) i0 (pair 3 4))
+
 -- A transport fill: the face ~i makes the line constant at i0; the i1 end is stuck.
-def fillT : PathP (fun (i : I) => (p : Path (Type 0) Nat Nat) -> p @ i) (fun (p : Path (Type 0) Nat Nat) => 0)
-    (fun (p : Path (Type 0) Nat Nat) => transport Nat Nat p 0) :=
-  fun (i : I) => fun (p : Path (Type 0) Nat Nat) => transp (fun (j : I) => p @ (i /\ j)) (~i) 0
+def fillT : PathP (fun (i : I) => (p : Path (Type 0) Nat Nat) -> p @ i) (fun (p : Path (Type 0) Nat Nat) => 0) (fun (p : Path (Type 0) Nat Nat) => transport Nat Nat p 0) :=
+  fun (i : I) (p : Path (Type 0) Nat Nat) => transp (fun (j : I) => p @ (i /\ j)) ~i 0
+
 -- Kan operations (S2b): trans by hcomp, the hcomp rules at Pi and in data,
 -- transport in a Path line (rule 7) and a contradictory face.
-def transEnd : (A : Type 0) -> (x : A) -> (y : A) -> (z : A) -> (p : Path A x y) -> (q : Path A y z) ->
-  Path A ((trans A x y z p q) @ i1) z :=
-  fun (A : Type 0) => fun (x : A) => fun (y : A) => fun (z : A) => fun (p : Path A x y) => fun (q : Path A y z) => refl
+def transEnd : (A : Type 0) -> (x : A) -> (y : A) -> (z : A) -> (p : Path A x y) -> (q : Path A y z) -> Path A (trans A x y z p q @ i1) z :=
+  fun (A : Type 0) (x : A) (y : A) (z : A) (p : Path A x y) (q : Path A y z) => refl
+
 def transNat : Path Nat 3 3 := trans Nat 3 3 3 trNat trNat
-def evTrans : Nat := (trans Nat 3 3 3 trNat trNat) @ i1
-def transportPathP : (A : Type 0) -> (x : A) -> (y : A) -> (r : Path A x y) -> (p : Path A x x) ->
-  Path A ((transp (fun (i : I) => Path A (r @ i) (r @ i)) i0 p) @ i0) y :=
-  fun (A : Type 0) => fun (x : A) => fun (y : A) => fun (r : Path A x y) => fun (p : Path A x x) => refl
-def hcompPi : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (h : Path (A -> B) f f) ->
-  Path (Path (A -> B) f f)
-    (fun (j : I) => hcomp (A -> B) (~j \/ j) (fun (i : I) => [ ~j -> f, j -> h @ i ]) (h @ j))
-    (fun (j : I) => fun (x : A) => hcomp B (~j \/ j) (fun (i : I) => [ ~j -> f x, j -> (h @ i) x ]) ((h @ j) x)) :=
-  fun (A : Type 0) => fun (B : Type 0) => fun (f : A -> B) => fun (h : Path (A -> B) f f) => refl
+
+def evTrans : Nat := trans Nat 3 3 3 trNat trNat @ i1
+
+def transportPathP : (A : Type 0) -> (x : A) -> (y : A) -> (r : Path A x y) -> (p : Path A x x) -> Path A (transp (fun (i : I) => Path A (r @ i) (r @ i)) i0 p @ i0) y :=
+  fun (A : Type 0) (x : A) (y : A) (r : Path A x y) (p : Path A x x) => refl
+
+def hcompPi : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (h : Path (A -> B) f f) -> Path (Path (A -> B) f f) (fun (j : I) => hcomp (A -> B) (~j \/ j) (fun (i : I) => [ ~j -> f, j -> h @ i ]) (h @ j)) (fun (j : I) (x : A) => hcomp B (~j \/ j) (fun (i : I) => [ ~j -> f x, j -> (h @ i) x ]) ((h @ j) x)) :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (h : Path (A -> B) f f) => refl
+
 -- The face k \/ (j /\ ~j) is k: the key k covers it.
 def faceView : Path (Path Nat 3 3) (fun (k : I) => 3) (fun (k : I) => 3) :=
-  fun (j : I) => fun (k : I) => hcomp Nat (k \/ (j /\ ~j)) (fun (i : I) => [ k -> 3 ]) 3
+  fun (j : I) (k : I) => hcomp Nat (k \/ j /\ ~j) (fun (i : I) => [ k -> 3 ]) 3

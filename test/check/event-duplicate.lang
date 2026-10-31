@@ -1,3 +1,4 @@
 -- Two events cannot have the same name (slice K4a1).
 event Opened
+
 event Opened (n : Nat)

@@ -1,0 +1,10 @@
+-- the head comment
+def one : Nat := 1
+
+-- a comment inside the decl
+def two : Nat := natAdd one one
+
+-- a comment on the decl line
+def three : Nat := 3
+
+-- the comment at the end

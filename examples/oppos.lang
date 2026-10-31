@@ -1,5 +1,8 @@
 -- The trace position (S3, USER ruling Q-S3-3 (a)): `len A r` counts the
 -- ops of the trace r : FreeMon A, and a position is an OpPos.
 def lenEmpty : OpPos := len Size (fmUnit Size)
+
 def lenOne : OpPos := len Size (fmCons Size sz0 (fmUnit Size))
-def lenTwo : OpPos := len Size (fmMul Size (fmCons Size sz0 (fmUnit Size)) (fmCons Size (szS sz0) (fmUnit Size)))
+
+def lenTwo : OpPos :=
+  len Size (fmMul Size (fmCons Size sz0 (fmUnit Size)) (fmCons Size (szS sz0) (fmUnit Size)))
