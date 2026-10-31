@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"LEX_CHAR","span":{"file":"test/json/LEX_CHAR.lang","line":1,"col":17,"end_line":1,"end_col":18},"message":"-: test/json/LEX_CHAR.lang:1:17: a letter follows a Nat literal","fix":{"span":{"file":"test/json/LEX_CHAR.lang","line":1,"col":17,"end_line":1,"end_col":18},"text":""}}],"progress":{"parsed":0,"typed":0,"laws_discharged":0,"laws_total":0}}

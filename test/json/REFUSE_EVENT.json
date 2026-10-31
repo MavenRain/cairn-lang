@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_EVENT","span":{"file":"test/json/REFUSE_EVENT.lang","line":2,"col":1,"end_line":2,"end_col":32},"message":"Pair: a is already a field of the event Pair","fix":null}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}

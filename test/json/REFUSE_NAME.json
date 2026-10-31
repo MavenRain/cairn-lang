@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_NAME","span":{"file":"test/json/REFUSE_NAME.lang","line":1,"col":1,"end_line":1,"end_col":20},"message":"head: head is a domain definition (rule R4)","fix":null}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}

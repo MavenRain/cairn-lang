@@ -1,0 +1,5 @@
+-- A law after the failing decl (S12, the killer of M3b): laws_total
+-- counts later, a program law that check does not reach.
+def bad : Type 0 := Type 0
+
+law def later : Type 1 := Type 0

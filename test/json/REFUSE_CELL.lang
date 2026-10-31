@@ -1,0 +1,2 @@
+-- A guest List is refused (S3, rule R1): the cons list is kit only.
+def t : Type 0 := List Size

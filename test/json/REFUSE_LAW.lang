@@ -1,0 +1,3 @@
+-- REFUSE_LAW (rule O7, leak L4): Enc has one constructor, so its field
+-- encOf is a projection, and the projection is decrypt.
+def projLeak : Enc Size -> Size := fun (c : Enc Size) => encOf c

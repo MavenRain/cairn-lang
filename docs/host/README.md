@@ -77,7 +77,7 @@ The compiler enforces these rules:
 ## CLI
 
 ```sh
-build/langc check PROG
+build/langc check [--json] PROG
 build/langc eval PROG NAME [ARGS...]
 build/langc ir PROG
 build/langc abi PROG
@@ -85,7 +85,9 @@ build/langc build PROG -o OUT [--runtime]
 build/langc fmt PROG [--check]
 ```
 
-- `check` prints `ok`, or refuses the program.
+- `check` prints `ok`, or refuses the program. With `--json`, it
+  prints one JSON line on stdout in place of `ok` or the diagnostic
+  (`docs/CHECK-JSON.md`).
 - `eval` prints the normal form of `NAME`. Each argument is a decimal
   number. When an entry traps, `eval` prints `trap` on stdout and an
   `EVAL_OVERFLOW` line on stderr, and the exit status is 0.
@@ -191,10 +193,13 @@ what the domain holds and how to change it.
 | `test/ir wasm: 5 modules valid, 32 rows, 0 mismatches` | each `test/ir` module builds in `--kit` mode and is valid, and each row of the gate list gives the same result on `build/wasmtool` and in `langc --kit eval` |
 | `test/ir js: 32 rows, 0 mismatches` | each row of the `test/ir` gate list gives the same result on `build/jstool` and in `langc --kit eval` |
 | `json abi: 2 checked` | `langc --kit abi test/wasm/secp.lang` prints the JSON abi line (each kind is `nat`, `flag` or `u256`), and `abi` with a flag other than `--text` refuses `USAGE` |
-| `fmt canonical: 271 passed` | `langc fmt` gives the same bytes for each accepted `.lang` file of `domain/`, `examples/` and `test/*/` outside `test/fmt/`; each file that `langc fmt` refuses is in `test/fmt/refused.txt` (18 `test/parse` files), and no accepted file is |
-| `fmt round trip: 278 passed` | each accepted file (the 271 files and the 7 `test/fmt/*.lang` files) and its canonical text give the same `build/fronttool dump` (`test/fronttool.c`: one line for each node, with no line numbers and no comments) |
+| `fmt canonical: 289 passed` | `langc fmt` gives the same bytes for each accepted `.lang` file of `domain/`, `examples/` and `test/*/` outside `test/fmt/` (the `test/json` rows `LEX_*` and `PARSE_*` are not in this check); each file that `langc fmt` refuses is in `test/fmt/refused.txt` (18 `test/parse` files), and no accepted file is |
+| `fmt round trip: 296 passed` | each accepted file (the 289 files and the 7 `test/fmt/*.lang` files) and its canonical text give the same `build/fronttool dump` (`test/fronttool.c`: one line for each node, with no line numbers and no comments) |
 | `fmt rows: 7 passed` | `langc fmt test/fmt/X.lang` gives the bytes of `test/fmt/X.canon` for each of the 7 rows |
 | `fmt check: 8 passed` | `langc fmt X.canon --check` exits 0 for each of the 7 rows, and `langc fmt test/fmt/check.lang --check` exits 1 with `test/fmt/check.lang:3: not canonical` |
+| `json rows: 20 passed` | for each `test/json/X.lang`, `langc check --json` exits 0 (the rows `ok` and `kit`) or 1 (each other row, whose first code is the file name up to the first dot), writes nothing on stderr, and gives the bytes of `test/json/X.json`; each refused row has `test/json/X.fix` (`docs/CHECK-JSON.md`) |
+| `json refusal codes: 13 of 13` | each `REFUSE_` code of `src/front/check.c` has a row `test/json/CODE.lang`, and the list of codes is not empty |
+| `json fixes: 18 passed` | `build/fronttool fix` applies each `test/json/X.fix` to its row, and `langc check --json` of the result exits 0 or gives a first code other than the code of the row |
 | `gate: 0 failures` | the sum of all failures |
 
 `make check` also runs `test/jstest.c` against an ES module with entries

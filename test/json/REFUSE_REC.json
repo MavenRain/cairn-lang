@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_REC","span":{"file":"test/json/REFUSE_REC.lang","line":1,"col":1,"end_line":1,"end_col":59},"message":"loop: def rec is refused (rule R3); use fold or unfold","fix":null}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}

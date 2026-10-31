@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_AXIOM","span":{"file":"test/json/REFUSE_AXIOM.lang","line":1,"col":1,"end_line":1,"end_col":18},"message":"magic: an axiom has no proof (rule R2)","fix":null}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}

@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"TYPE_MISMATCH","span":{"file":"test/json/TYPE_MISMATCH.splice.lang","line":4,"col":1,"end_line":4,"end_col":27},"message":"bad: expected a term of type Type 0, found a term of type Type 1","fix":null}],"progress":{"parsed":9,"typed":0,"laws_discharged":0,"laws_total":1}}

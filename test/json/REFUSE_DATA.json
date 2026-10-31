@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_DATA","span":{"file":"test/json/REFUSE_DATA.lang","line":1,"col":1,"end_line":1,"end_col":29},"message":"Coin: a program cannot declare a family (rule R1); only domain/domain.lang can","fix":null}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}

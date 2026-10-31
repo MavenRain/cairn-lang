@@ -1,0 +1,2 @@
+1 5 1 59
+loop : (n : Nat) -> Nat := fun (n : Nat) => n

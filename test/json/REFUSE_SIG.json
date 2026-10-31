@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_SIG","span":{"file":"test/json/REFUSE_SIG.lang","line":1,"col":1,"end_line":1,"end_col":31},"message":"Outcome: the slot Outcome must have the type Type 0","fix":{"span":{"file":"test/json/REFUSE_SIG.lang","line":1,"col":15,"end_line":1,"end_col":21},"text":"Type 0"}}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}

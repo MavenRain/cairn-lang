@@ -1,6 +1,8 @@
 /* Domain declaration regressions use the same parser and checker as langc.
    `fronttool dump FILE` prints the syntax tree of FILE, one node a line and
-   no positions, so a file and its fmt text can be compared. */
+   no positions, so a file and its fmt text can be compared. `fronttool fix
+   FILE FIXFILE` prints FILE with the edit of FIXFILE applied, so the fix of
+   a `langc check --json` diagnostic can be tested. */
 #include <stdio.h>
 #include <string.h>
 
@@ -8,6 +10,7 @@
 #include "front/check.h"
 #include "front/fmt.h"
 #include "front/front.h"
+#include "front/json.h"
 #include "front/lexer.h"
 #include "front/parser.h"
 
@@ -342,6 +345,72 @@ static int dump(const char *file) {
   return ok ? 0 : 1;
 }
 
+/* fix_load reads FILE into TEXT, a buffer of SIZE bytes, and sets *LEN. It
+   prints the error and gives 0 on a read error or a file that fills TEXT. */
+static int fix_load(const char *file, char *text, size_t size, size_t *len) {
+  FILE *in = fopen(file, "rb");
+  if (in == NULL) {
+    fprintf(stderr, "fronttool: cannot read %s\n", file);
+    return 0;
+  }
+  *len = fread(text, 1, size, in);
+  fclose(in);
+  if (*len == size) {
+    fprintf(stderr, "fronttool: %s is too large\n", file);
+    return 0;
+  }
+  return 1;
+}
+
+/* fix_offset sets *AT to the byte offset of LINE:COL in TEXT. It counts as
+   the lexer does (lexer.c advance): lines and columns start at 1, a column
+   is one byte, and a newline starts column 1 of the next line. The end of
+   TEXT is a position; a column past the newline of its line is not. */
+static int fix_offset(const char *text, size_t len, long line, long col, size_t *at) {
+  long l = 1, c = 1;
+  size_t i;
+  for (i = 0; i < len && (l != line || c != col); i++) {
+    if (l == line && text[i] == '\n') return 0;
+    int newline = text[i] == '\n';
+    l += newline;
+    c = newline ? 1 : c + 1;
+  }
+  *at = i;
+  return l == line && c == col;
+}
+
+/* fix prints FILE with one edit applied (S12 A2: a test of the fix of a
+   `langc check --json` diagnostic). FIXFILE line 1 is `LINE COL END_LINE
+   END_COL`, the fix span, with an exclusive end; the rest of FIXFILE, less
+   one final newline, is the text that replaces the span. Exit 2 on a read
+   error, a bad line 1, or a span outside FILE or with its end before its
+   start. */
+static int fix(const char *file, const char *fixfile) {
+  static char text[1 << 20];
+  static char edit[1 << 20];
+  size_t len, edit_len, from, to;
+  long line, col, end_line, end_col;
+  int head = 0;
+  if (!fix_load(file, text, sizeof text, &len) || !fix_load(fixfile, edit, sizeof edit, &edit_len)) return 2;
+  edit[edit_len] = '\0';
+  if (sscanf(edit, "%ld %ld %ld %ld%n", &line, &col, &end_line, &end_col, &head) != 4
+      || edit[head] != '\n' || memchr(edit, '\n', (size_t)head) != NULL) {
+    fprintf(stderr, "fronttool: %s: line 1 is not LINE COL END_LINE END_COL\n", fixfile);
+    return 2;
+  }
+  if (!fix_offset(text, len, line, col, &from) || !fix_offset(text, len, end_line, end_col, &to) || to < from) {
+    fprintf(stderr, "fronttool: %s: the span is outside %s or ends before it starts\n", fixfile, file);
+    return 2;
+  }
+  size_t at = (size_t)head + 1u;
+  size_t count = edit_len - at;
+  if (count > 0 && edit[edit_len - 1] == '\n') count--;
+  fwrite(text, 1, from, stdout);
+  fwrite(edit + at, 1, count, stdout);
+  fwrite(text + to, 1, len - to, stdout);
+  return 0;
+}
+
 /* The original text parses, but a canonical spelling can cross a compiler
    limit. The command must refuse that text before it reaches stdout. */
 static int fmt_limit(const char *kind, size_t count, const char *want) {
@@ -383,10 +452,90 @@ static int fmt_limit(const char *kind, size_t count, const char *want) {
   return ok;
 }
 
+/* S12 (Q-S12-12): two paths that no program text reaches through `langc
+   check --json`. A quote goes into a JSON string only from a file path, and
+   no fix is pending when branch_index resets diag->set (the reset needs a
+   first TYPE_MISMATCH, and no check code with a fix is TYPE_MISMATCH). */
+static int json_quote(void) {
+  FILE *out = tmpfile();
+  char got[64];
+  size_t n;
+  int ok;
+  if (out == NULL) {
+    fputs("FAIL json quote: no tmpfile\n", stderr);
+    return 0;
+  }
+  json_string("a\"b\\c\nd", out);
+  rewind(out);
+  n = fread(got, 1u, sizeof got - 1u, out);
+  fclose(out);
+  got[n] = '\0';
+  ok = strcmp(got, "\"a\\\"b\\\\c\\nd\"") == 0;
+  if (!ok) fprintf(stderr, "FAIL json quote: got %s\n", got);
+  return ok;
+}
+
+static int diag_fix_reset(void) {
+  Diag diag;
+  Span span;
+  int ok;
+  memset(&span, 0, sizeof span);
+  diag_init(&diag);
+  diag_fix(&diag, span, "x");
+  diag_fail(&diag, "TYPE_MISMATCH", NULL, "first");
+  ok = diag.fix_set == 1;
+  diag.set = 0;
+  diag_fail(&diag, "HIT_INDEX", NULL, "second");
+  ok = ok && diag.fix_set == 0 && strcmp(diag.code, "HIT_INDEX") == 0;
+  if (!ok) fprintf(stderr, "FAIL diag fix reset: fix_set %d, code %s\n", diag.fix_set, diag.code);
+  return ok;
+}
+
+/* Apply each op-slot fix and check the resulting program. Its Nat body
+   still has the wrong type, but the replacement type must parse. */
+static int signature_fixes(void) {
+  const char *prelude = "def isSet : Type 0 -> Type 0 := fun A => Unit\n"
+    "def Constitution : Type 0 := Unit\n";
+  const char *slots[] = {"act", "outcomeSet", "menu"};
+  int passed = 1;
+  for (size_t i = 0; i < sizeof slots / sizeof slots[0]; i++) {
+    Arena arena;
+    Diag diag;
+    TokenList tokens = {0};
+    DeclList decls = {0};
+    Machine machine;
+    char source[1024], fixed[2048];
+    size_t from = 0, to = 0;
+    snprintf(source, sizeof source, "def Member : Type 0 := Unit\n"
+      "def Choice : Type 0 := Unit\ndef Group : Type 0 := Unit\n"
+      "def Outcome : Type 0 := Unit\ndef %s : Nat := 0\n", slots[i]);
+    arena_init(&arena, (size_t)1 << 24);
+    diag_init(&diag);
+    int ok = lex_source(&arena, "prelude", prelude, strlen(prelude), &tokens, &diag)
+      && parse_source(&arena, "prelude", ORIGIN_DOMAIN, &tokens, &decls, &diag)
+      && lex_source(&arena, "program", source, strlen(source), &tokens, &diag)
+      && parse_source(&arena, "program", ORIGIN_PROGRAM, &tokens, &decls, &diag);
+    ok = ok && !check_program(&arena, &decls, &machine, &diag, CHECK_KIT)
+      && diag.code != NULL && strcmp(diag.code, "REFUSE_SIG") == 0 && diag.fix_set
+      && fix_offset(source, strlen(source), diag.fix_span.line, diag.fix_span.col, &from)
+      && fix_offset(source, strlen(source), diag.fix_span.end_line, diag.fix_span.end_col, &to)
+      && to >= from;
+    if (ok) {
+      snprintf(fixed, sizeof fixed, "%.*s%s%s", (int)from, source, diag.fix, source + to);
+      ok = checked_in(prelude, fixed, ORIGIN_PROGRAM, CHECK_KIT, "TYPE_MISMATCH");
+    }
+    if (!ok) fprintf(stderr, "FAIL signature fix: %s\n", slots[i]);
+    passed &= ok;
+    arena_release(&arena);
+  }
+  return passed;
+}
+
 int main(int argc, char **argv) {
   if (argc == 3 && strcmp(argv[1], "dump") == 0) return dump(argv[2]);
+  if (argc == 4 && strcmp(argv[1], "fix") == 0) return fix(argv[2], argv[3]);
   if (argc != 1) {
-    fputs("usage: fronttool [dump FILE]\n", stderr);
+    fputs("usage: fronttool [dump FILE | fix FILE FIXFILE]\n", stderr);
     return 2;
   }
   int ok = 1;
@@ -820,6 +969,10 @@ int main(int argc, char **argv) {
      is wrong. */
   ok &= guest("def keep : Sum Unit Unit -> Sum Unit Unit := fun c => c", NULL);
   ok &= guest("def three : Nat := 3", "REFUSE_KIT");
+  /* S12 (Q-S12-12): the json quote escape and the fix reset of diag_vfail. */
+  ok &= json_quote();
+  ok &= diag_fix_reset();
+  ok &= signature_fixes();
   if (ok) puts("domain regressions: passed");
   return ok ? 0 : 1;
 }

@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_TIME","span":{"file":"test/json/REFUSE_TIME.lang","line":2,"col":1,"end_line":2,"end_col":19},"message":"now: now is a time word; count operations: a position is `len r` (an OpPos) and a deadline is a count of later operations","fix":null}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}

@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_KIT","span":{"file":"test/json/REFUSE_KIT.lang","line":1,"col":1,"end_line":1,"end_col":13},"message":"Opened: an event is a kit item outside the base span (PLAN section 4); only the kit mode langc --kit admits it","fix":null}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}

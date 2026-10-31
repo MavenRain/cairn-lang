@@ -8,8 +8,8 @@ CFLAGS = -std=c99 -Wall -Werror -Isrc
 CLANG_FLAGS = -std=c99 -Wall -Wextra -Wswitch-enum -Werror -fsyntax-only -Isrc
 FRONT = src/front/base.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/front/frost.c src/front/lexer.c src/front/parser.c src/front/front.c src/front/eval.c src/front/check.c src/front/fmt.c src/sha256.c
 TARGET = src/front/lower.c src/wasm.c src/js.c src/wgsl.c
-SRC = src/main.c $(FRONT) $(TARGET)
-FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c,$(FRONT))
+SRC = src/main.c src/front/json.c $(FRONT) $(TARGET)
+FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c,$(FRONT)) src/front/json.c
 BLSAG_TOOL = test/blsagtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/sha256.c
 ELGAMAL_TOOL = test/elgamaltool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/sha256.c
 THRESHOLD_TOOL = test/thresholdtool.c src/front/u256.c src/front/field.c src/front/secp256k1.c src/front/blsag.c src/front/elgamal.c src/front/threshold.c src/sha256.c

@@ -1,0 +1,3 @@
+state State := makeState (count : Nat)
+
+state Other := makeOther (flag : Nat)

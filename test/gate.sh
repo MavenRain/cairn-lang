@@ -637,6 +637,9 @@ canon=0
 trips=0
 refused=0
 for f in domain/domain.lang examples/*.lang test/*/*.lang; do
+  case $f in
+    test/json/LEX_* | test/json/PARSE_*) continue ;;
+  esac
   status=0
   build/langc fmt "$f" >"$tmp/fmt.out" 2>"$tmp/fmt.err" || status=$?
   listed=0
@@ -701,6 +704,84 @@ else
 fi
 echo "fmt rows: $rows passed"
 echo "fmt check: $checks passed"
+
+# json rows: begin
+# Each test/json/CODE.lang is a row: `langc check --json` writes
+# test/json/CODE.json on stdout and nothing on stderr. It exits 0 for ok and
+# kit, else it exits 1 and the first code is CODE. The rows kit,
+# REFUSE_HISTORY_WRITE, REFUSE_MAP and REFUSE_STATE run with --kit. Each
+# REFUSE_ code of src/front/check.c has a row. Each row other than ok and kit
+# has test/json/CODE.fix: `fronttool fix` applies it, and `langc check --json`
+# of the result exits 0 or gives a first code other than CODE.
+# A row CODE.TAG.lang is one more row for CODE (the code is the file name up
+# to the first dot); its .json and .fix go by the name CODE.TAG.
+json_kit() {
+  case $1 in
+    kit | REFUSE_HISTORY_WRITE | REFUSE_MAP | REFUSE_STATE) echo --kit ;;
+  esac
+}
+jrows=0
+for f in test/json/*.lang; do
+  stem=$(basename "$f" .lang)
+  code=${stem%%.*}
+  case $code in
+    ok | kit) want=0 head='{"diagnostics":[],' ;;
+    *)
+      want=1 head="{\"diagnostics\":[{\"code\":\"$code\","
+      [ -f "test/json/$stem.fix" ] || { echo "FAIL json $f: test/json/$stem.fix is missing"; fail=$((fail + 1)); }
+      ;;
+  esac
+  status=0
+  build/langc $(json_kit "$code") check --json "$f" >"$tmp/json.out" 2>"$tmp/json.err" || status=$?
+  first=0
+  case $(cat "$tmp/json.out") in
+    "$head"*) first=1 ;;
+  esac
+  if [ "$status" -eq "$want" ] && [ "$first" -eq 1 ] && [ ! -s "$tmp/json.err" ] && cmp -s "${f%.lang}.json" "$tmp/json.out"; then
+    jrows=$((jrows + 1))
+  else
+    echo "FAIL json $f: want exit $want and ${f%.lang}.json, got exit $status: $(head -c 80 "$tmp/json.out")"
+    fail=$((fail + 1))
+  fi
+done
+jcodes=0
+jwant=0
+for code in $(rg -o --no-filename 'REFUSE_[A-Z_]+' src/front/check.c | sort -u); do
+  jwant=$((jwant + 1))
+  if [ -f "test/json/$code.lang" ]; then
+    jcodes=$((jcodes + 1))
+  else
+    echo "FAIL json: no row test/json/$code.lang for the check code $code"
+    fail=$((fail + 1))
+  fi
+done
+[ "$jwant" -gt 0 ] || { echo "FAIL json: no REFUSE_ code in src/front/check.c"; fail=$((fail + 1)); }
+jfixes=0
+for x in test/json/*.fix; do
+  stem=$(basename "$x" .fix)
+  code=${stem%%.*}
+  if ! build/fronttool fix "test/json/$stem.lang" "$x" >"$tmp/fixed.lang" 2>"$tmp/json.err"; then
+    echo "FAIL json fix $x: fronttool fix fails: $(head -n 1 "$tmp/json.err")"
+    fail=$((fail + 1))
+    continue
+  fi
+  status=0
+  build/langc $(json_kit "$code") check --json "$tmp/fixed.lang" >"$tmp/json.out" 2>"$tmp/json.err" || status=$?
+  same=0
+  case $(cat "$tmp/json.out") in
+    "{\"diagnostics\":[{\"code\":\"$code\","*) same=1 ;;
+  esac
+  if [ "$status" -eq 0 ] || { [ "$status" -eq 1 ] && [ "$same" -eq 0 ]; }; then
+    jfixes=$((jfixes + 1))
+  else
+    echo "FAIL json fix $x: the fixed file gives exit $status: $(head -c 80 "$tmp/json.out")"
+    fail=$((fail + 1))
+  fi
+done
+echo "json rows: $jrows passed"
+echo "json refusal codes: $jcodes of $jwant"
+echo "json fixes: $jfixes passed"
+# json rows: end
 
 status=0
 build/langc 2>/dev/null || status=$?

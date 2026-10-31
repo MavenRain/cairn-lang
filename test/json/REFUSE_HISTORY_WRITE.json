@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_HISTORY_WRITE","span":{"file":"test/json/REFUSE_HISTORY_WRITE.lang","line":4,"col":1,"end_line":4,"end_col":44},"message":"mk: the history field earned must be (earned t) or ADD (earned t) e, with ADD u256Add or natAdd (rule D-9)","fix":null}],"progress":{"parsed":2,"typed":1,"laws_discharged":0,"laws_total":0}}

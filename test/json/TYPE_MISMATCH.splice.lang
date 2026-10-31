@@ -1,0 +1,23 @@
+-- The kernel splices the DAO prelude after outcomeSet, so domain defs
+-- follow the failing decl (S12, the killer of M4b): laws_total counts
+-- program decls only. Member to act are examples/dao3.lang lines 4 to 19.
+def bad : Type 0 := Type 0
+
+def Member : Type 0 := Sum Unit (Sum Unit Unit)
+
+def Choice : Type 0 := Sum Unit Unit
+
+def Outcome : Type 0 := Choice
+
+def Group : Type 0 := Sum Unit Unit
+
+def flip : Choice -> Choice :=
+  fun (c : Choice) => either (fun (u : Unit) => inr unit) (fun (u : Unit) => inl unit) c
+
+def swap01 : Member -> Member :=
+  fun (m : Member) => either (fun (u : Unit) => inr (inl unit)) (fun (r : Sum Unit Unit) => either (fun (u : Unit) => inl unit) (fun (u : Unit) => inr (inr unit)) r) m
+
+def act : Group -> (Member -> Choice) -> Member -> Choice :=
+  fun (g : Group) (f : Member -> Choice) (m : Member) => either (fun (u : Unit) => f m) (fun (u : Unit) => f (swap01 m)) g
+
+law def outcomeSet : Type 1 := Type 0

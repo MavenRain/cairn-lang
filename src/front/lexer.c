@@ -209,10 +209,11 @@ static int lex_hex(Lexer *lx) {
   suffix = at_suffix(lx);
   advance(lx, suffix ? 1u : 0u);
   if (is_ident_char(peek(lx, 0))) {
-    return diag_fail(lx->diag, "LEX_CHAR", NULL, "%s:%d:%d: a letter follows a hex literal", lx->source, lx->line, lx->col);
+    diag_fix(lx->diag, span_make(lx->line, lx->col, lx->line, lx->col + 1), "");
+    return diag_fail_at(lx->diag, span_make(lx->line, lx->col, lx->line, lx->col + 1), "LEX_CHAR", NULL, "%s:%d:%d: a letter follows a hex literal", lx->source, lx->line, lx->col);
   }
   if (suffix ? digits == 0 || digits > 64 : digits != 40) {
-    return diag_fail(lx->diag, "LEX_HEX", NULL, "%s:%d:%d: a hex literal is 0x, 1 to 64 hex digits and u (a U256), or 0x and 40 hex digits (an Addr); found %u hex digits", lx->source, line, col, (unsigned)digits);
+    return diag_fail_at(lx->diag, span_make(line, col, lx->line, lx->col), "LEX_HEX", NULL, "%s:%d:%d: a hex literal is 0x, 1 to 64 hex digits and u (a U256), or 0x and 40 hex digits (an Addr); found %u hex digits", lx->source, line, col, (unsigned)digits);
   }
   return push_word(lx, suffix ? WORD_U256 : WORD_ADDR, value, start, line, col);
 }
@@ -236,15 +237,16 @@ static int lex_nat(Lexer *lx) {
   if (at_suffix(lx)) {
     advance(lx, 1);
     if (wide_overflow) {
-      return diag_fail(lx->diag, "LEX_U256_RANGE", NULL, "%s:%d:%d: a U256 literal is larger than 2^256 - 1", lx->source, line, col);
+      return diag_fail_at(lx->diag, span_make(line, col, lx->line, lx->col), "LEX_U256_RANGE", NULL, "%s:%d:%d: a U256 literal is larger than 2^256 - 1", lx->source, line, col);
     }
     return push_word(lx, WORD_U256, wide, start, line, col);
   }
   if (overflow) {
-    return diag_fail(lx->diag, "LEX_NAT_RANGE", NULL, "%s:%d:%d: a Nat literal is larger than 2^64 - 1", lx->source, line, col);
+    return diag_fail_at(lx->diag, span_make(line, col, lx->line, lx->col), "LEX_NAT_RANGE", NULL, "%s:%d:%d: a Nat literal is larger than 2^64 - 1", lx->source, line, col);
   }
   if (is_ident_start(peek(lx, 0))) {
-    return diag_fail(lx->diag, "LEX_CHAR", NULL, "%s:%d:%d: a letter follows a Nat literal", lx->source, lx->line, lx->col);
+    diag_fix(lx->diag, span_make(lx->line, lx->col, lx->line, lx->col + 1), "");
+    return diag_fail_at(lx->diag, span_make(lx->line, lx->col, lx->line, lx->col + 1), "LEX_CHAR", NULL, "%s:%d:%d: a letter follows a Nat literal", lx->source, lx->line, lx->col);
   }
   push(lx, TOK_NAT, start, line, col)->nat = value;
   return 1;
@@ -291,7 +293,8 @@ static int lex_symbol(Lexer *lx) {
     default: break;
   }
   if (kind == TOK_EOF) {
-    return diag_fail(lx->diag, "LEX_CHAR", NULL, "%s:%d:%d: unexpected byte 0x%02x", lx->source, line, col, (unsigned)(unsigned char)c);
+    diag_fix(lx->diag, span_make(line, col, line, col + 1), "");
+    return diag_fail_at(lx->diag, span_make(line, col, line, col + 1), "LEX_CHAR", NULL, "%s:%d:%d: unexpected byte 0x%02x", lx->source, line, col, (unsigned)(unsigned char)c);
   }
   advance(lx, width);
   push(lx, kind, start, line, col);

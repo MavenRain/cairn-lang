@@ -66,13 +66,31 @@ static int eat(Parser *p, TokKind kind) {
   return 1;
 }
 
+/* The range of TOK (S12). */
+static Span tok_span(const Token *tok) {
+  return span_make(tok->line, tok->col, tok->line, tok->col + (int)tok->len);
+}
+
+/* Record the range of the tokens of the type of D: type_start before
+   parse_term, type_end after it (S12). */
+static void type_start(const Parser *p, Decl *d) {
+  d->type_line = p->toks[p->pos].line;
+  d->type_col = p->toks[p->pos].col;
+}
+
+static void type_end(const Parser *p, Decl *d) {
+  const Token *last = &p->toks[p->pos - 1];
+  d->type_end_line = last->line;
+  d->type_end_col = last->col + (int)last->len;
+}
+
 static int oom(Parser *p) {
   return diag_fail(p->diag, "OOM", p->def, "%s: the arena limit is reached", p->source);
 }
 
 static int fail_at(Parser *p, const Token *tok, const char *what) {
-  return diag_fail(p->diag, "PARSE_EXPECT", p->def, "%s:%d:%d: expected %s, found %s",
-                   p->source, tok->line, tok->col, what, tok_kind_name(tok->kind));
+  return diag_fail_at(p->diag, tok_span(tok), "PARSE_EXPECT", p->def, "%s:%d:%d: expected %s, found %s",
+                      p->source, tok->line, tok->col, what, tok_kind_name(tok->kind));
 }
 
 static int expect(Parser *p, TokKind kind, const char *what) {
@@ -82,8 +100,8 @@ static int expect(Parser *p, TokKind kind, const char *what) {
 static int enter(Parser *p) {
   p->depth++;
   if (p->depth <= PARSE_MAX_DEPTH) return 1;
-  return diag_fail(p->diag, "PARSE_DEPTH", p->def, "%s:%d:%d: terms nest deeper than %d levels",
-                   p->source, cur(p)->line, cur(p)->col, PARSE_MAX_DEPTH);
+  return diag_fail_at(p->diag, tok_span(cur(p)), "PARSE_DEPTH", p->def, "%s:%d:%d: terms nest deeper than %d levels",
+                      p->source, cur(p)->line, cur(p)->col, PARSE_MAX_DEPTH);
 }
 
 static const char *token_text(Parser *p, const Token *tok) {
@@ -515,7 +533,9 @@ static int parse_def(Parser *p, Decl *d) {
   if (d->name == NULL) return 0;
   p->def = d->name;
   if (!expect(p, TOK_COLON, "':'")) return 0;
+  type_start(p, d);
   d->type = parse_term(p);
+  type_end(p, d);
   if (d->type == NULL || !expect(p, TOK_DEFINE, "':='")) return 0;
   d->body = parse_term(p);
   return d->body != NULL;
@@ -528,7 +548,9 @@ static int parse_axiom(Parser *p, Decl *d) {
   if (d->name == NULL) return 0;
   p->def = d->name;
   if (!expect(p, TOK_COLON, "':'")) return 0;
+  type_start(p, d);
   d->type = parse_term(p);
+  type_end(p, d);
   return d->type != NULL;
 }
 
@@ -682,11 +704,13 @@ int parse_source(Arena *arena, const char *source, Origin origin, const TokenLis
     items = grow(&p, items, count, &cap, sizeof *items);
     if (items == NULL || !parse_decl(&p, &items[count])) return 0;
     items[count].end_line = p.toks[p.pos - 1].line;
+    items[count].end_col = p.toks[p.pos - 1].col + (int)p.toks[p.pos - 1].len;
     count++;
     while (at_and(&p, &items[first])) {
       items = grow(&p, items, count, &cap, sizeof *items);
       if (items == NULL || !parse_and(&p, &items[count])) return 0;
       items[count].end_line = p.toks[p.pos - 1].line;
+      items[count].end_col = p.toks[p.pos - 1].col + (int)p.toks[p.pos - 1].len;
       count++;
     }
     for (size_t k = first; k < count; k++) {

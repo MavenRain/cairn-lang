@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"PARSE_EXPECT","span":{"file":"test/json/PARSE_EXPECT.lang","line":1,"col":1,"end_line":1,"end_col":2},"message":"-: test/json/PARSE_EXPECT.lang:1:1: expected 'def', 'axiom', 'family', 'cofamily', 'state', 'event', 'sealed' or 'law', found a name","fix":null}],"progress":{"parsed":0,"typed":0,"laws_discharged":0,"laws_total":0}}

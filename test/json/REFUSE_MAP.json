@@ -1,0 +1,1 @@
+{"diagnostics":[{"code":"REFUSE_MAP","span":{"file":"test/json/REFUSE_MAP.lang","line":2,"col":1,"end_line":2,"end_col":41},"message":"bad: the key type of a Map must be Nat, U256 or Addr, found List Nat","fix":null}],"progress":{"parsed":1,"typed":0,"laws_discharged":0,"laws_total":0}}
