@@ -99,4 +99,50 @@ done
 # The sample domain is gone (S2, R21): its names are free for a program.
 printf 'def red : Nat := 1\ndef Color : Nat := 2\ndef lineTotal : Nat := natAdd red Color\n' >"$tmp/free.lang"
 test "$(build/langc --kit eval "$tmp/free.lang" lineTotal)" = 3
+
+# Exercise the token output recipes without Python, Rust or the network.
+# A producer that prints the right bytes and then fails must be refused.
+token_root="$tmp/tokens"
+mkdir -p "$token_root/build/tokens" "$token_root/bin" \
+  "$token_root/test/baseline/rust/target/debug"
+make -n tokens TOKEN_PROGRAMS=g2-committee \
+  'TOKEN_EVALS=g2-committee:appGood g2-committee:appBad' >"$tmp/token-make"
+awk '/^for row in / || /^for g in /' "$tmp/token-make" >"$tmp/token-recipes"
+test "$(wc -l <"$tmp/token-recipes")" -eq 2
+cat >"$token_root/bin/producer" <<'EOF'
+#!/bin/sh
+printf 'some 1\n'
+case "$0" in
+  */langc)
+    case "$*" in *appGood) exit "${TOKEN_LANGC_EXIT:-0}" ;; esac
+    ;;
+  */python3) printf 'some 1\n'; exit "${TOKEN_PYTHON_EXIT:-0}" ;;
+  */g2) printf 'some 1\n'; exit "${TOKEN_RUST_EXIT:-0}" ;;
+esac
+EOF
+chmod +x "$token_root/bin/producer"
+cp "$token_root/bin/producer" "$token_root/build/langc"
+cp "$token_root/bin/producer" "$token_root/bin/python3"
+cp "$token_root/bin/producer" "$token_root/test/baseline/rust/target/debug/g2"
+run_token_recipes() {
+  rm -f "$token_root/build/tokens/"*
+  while IFS= read -r recipe; do
+    (cd "$token_root" && PATH="$token_root/bin:$PATH" sh -c "$recipe") || return 1
+  done <"$tmp/token-recipes"
+}
+TOKEN_LANGC_EXIT=0 TOKEN_PYTHON_EXIT=0 TOKEN_RUST_EXIT=0
+export TOKEN_LANGC_EXIT TOKEN_PYTHON_EXIT TOKEN_RUST_EXIT
+run_token_recipes
+for producer in langc python rust; do
+  TOKEN_LANGC_EXIT=0 TOKEN_PYTHON_EXIT=0 TOKEN_RUST_EXIT=0
+  case "$producer" in
+    langc) TOKEN_LANGC_EXIT=7 ;;
+    python) TOKEN_PYTHON_EXIT=7 ;;
+    rust) TOKEN_RUST_EXIT=7 ;;
+  esac
+  if run_token_recipes >"$tmp/token-got" 2>"$tmp/token-err"; then
+    echo "FAIL tokens: accepted failed $producer producer"
+    exit 1
+  fi
+done
 echo 'review regressions: passed'

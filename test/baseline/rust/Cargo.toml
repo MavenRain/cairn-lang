@@ -1,0 +1,11 @@
+[package]
+name = "cairn-baseline"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
+sha2 = "0.10"

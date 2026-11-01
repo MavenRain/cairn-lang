@@ -30,11 +30,12 @@ PATH_TOOL = test/pathtool.c $(filter-out src/front/front.c,$(FRONT))
 RUN_TOOL = test/runtool.c $(FRONT)
 MCP_TOOL = test/mcptool.c
 SKILL_TOOL = test/skilltool.c
+TOK_TOOL = test/tokcount.c src/sha256.c
 HEADERS = $(wildcard src/*.h src/front/*.h)
 
-.PHONY: build check check-clang clean gpu-check
+.PHONY: build check check-clang clean gpu-check tokens
 
-build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/mcptool build/skilltool
+build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/mcptool build/skilltool build/tokcount
 
 build/domain.c: domain/domain.lang gen/embed.c
 	mkdir -p build
@@ -114,6 +115,10 @@ build/skilltool: $(SKILL_TOOL)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/skilltool $(SKILL_TOOL)
 
+build/tokcount: $(TOK_TOOL) $(HEADERS)
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/tokcount $(TOK_TOOL)
+
 check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(SRC) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(FRONT_TOOL)
@@ -134,8 +139,9 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) test/jstest.c
 	$(CC) $(CLANG_FLAGS) $(MCP_TOOL)
 	$(CC) $(CLANG_FLAGS) $(SKILL_TOOL)
+	$(CC) $(CLANG_FLAGS) $(TOK_TOOL)
 
-check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/mcptool build/skilltool build/jstest check-clang
+check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/mcptool build/skilltool build/tokcount build/jstest check-clang
 	sh test/gate.sh
 	sh test/run.sh
 	sh test/review.sh
@@ -179,6 +185,38 @@ check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thres
 	build/jstest
 	build/langc --kit abi test/ir/transp.lang --text > build/transp.abi
 	printf 'moved (nat) -> nat\n' | cmp -s - build/transp.abi || { echo "FAIL ABI: checked signatures must be available independently of lowering"; exit 1; }
+	build/tokcount --check docs/TOKEN-BASELINE.md
+	build/tokcount --estimate > build/tokens-estimate.md
+	awk '/^<!-- tokcount end -->/ {p = 0} p; /^<!-- tokcount begin -->/ {p = 1}' docs/TOKEN-BASELINE.md | cmp -s - build/tokens-estimate.md && echo "token estimate: passed" || { echo "FAIL tokens: the estimate block of docs/TOKEN-BASELINE.md is not the build/tokcount --estimate output"; exit 1; }
+
+# S15 (A6, Q-S15-6 (a)): the counts of docs/TOKEN-BASELINE.md. Run it outside
+# the sandbox with ANTHROPIC_API_KEY set: it builds the Rust crate and calls
+# the Anthropic API. It is not in check (Q-S0-8 (a)); check runs the offline
+# `build/tokcount --check` (Q-S15-7 (a)) and compares the estimate block of the
+# report with the `build/tokcount --estimate` output (Q-S15-10 (c)). A
+# `make tokens` run that replaces the estimate block must also remove that
+# compare.
+TOKEN_API = https://api.anthropic.com/v1
+TOKEN_HEADERS = -H "x-api-key: $$ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01"
+TOKEN_PROGRAMS = g1-record g2-committee g3-vote g4-amend g5-self-amend
+TOKEN_EVALS = g1-record:verifyHit g2-committee:appGood g2-committee:appBad g3-vote:tallyThree g4-amend:g4Append g4-amend:g4Refused g5-self-amend:g5Open g5-self-amend:g5Refused
+TOKEN_FILES = $(foreach g,$(TOKEN_PROGRAMS),examples/skill/$(g).lang test/baseline/$(g).py test/baseline/rust/src/bin/$(firstword $(subst -, ,$(g))).rs)
+RUST_BUILD ?= cargo build -j 2
+
+tokens: build/langc build/tokcount
+	@test -n "$$ANTHROPIC_API_KEY" || { echo "FAIL tokens: ANTHROPIC_API_KEY is not set"; exit 1; }
+	rm -rf build/tokens
+	mkdir -p build/tokens
+	{ date -u +%Y-%m-%dT%H:%M:%SZ; python3 --version; rustc --version; cargo --version; } > build/tokens/versions.txt
+	cd test/baseline/rust && $(RUST_BUILD)
+	for row in $(TOKEN_EVALS); do g=$${row%%:*}; kit=; test $$g = g2-committee && kit=--kit; build/langc $$kit eval examples/skill/$$g.lang $${row#*:} >> build/tokens/$$g.want || exit 1; done
+	for g in $(TOKEN_PROGRAMS); do python3 -I test/baseline/$$g.py > build/tokens/$$g.py.out && cmp -s build/tokens/$$g.want build/tokens/$$g.py.out || { echo "FAIL tokens: test/baseline/$$g.py failed or its output is not the langc eval output"; exit 1; }; test/baseline/rust/target/debug/$${g%%-*} > build/tokens/$$g.rs.out && cmp -s build/tokens/$$g.want build/tokens/$$g.rs.out || { echo "FAIL tokens: the Rust bin $${g%%-*} failed or its output is not the langc eval output"; exit 1; }; done
+	@echo "token outputs: 10 of 10"
+	curl -sS --fail-with-body $(TOKEN_HEADERS) "$(TOKEN_API)/models?limit=1000" -o build/tokens/models.json
+	build/tokcount --model build/tokens/models.json > build/tokens/model.txt
+	model=$$(cut -d ' ' -f 1 build/tokens/model.txt); for f in frame $(TOKEN_FILES); do n=$${f##*/}; src=$$f; test $$f = frame && src=; build/tokcount --request "$$model" $$src > build/tokens/$$n.req.json || exit 1; curl -sS --fail-with-body $(TOKEN_HEADERS) -H "content-type: application/json" --data-binary @build/tokens/$$n.req.json "$(TOKEN_API)/messages/count_tokens" -o build/tokens/$$n.json || exit 1; done
+	build/tokcount --table build/tokens > build/tokens/table.md
+	cat build/tokens/model.txt build/tokens/versions.txt build/tokens/table.md
 
 clean:
 	rm -rf build
