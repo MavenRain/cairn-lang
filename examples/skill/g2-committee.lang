@@ -1,0 +1,29 @@
+-- G2 (S14, Q-S14-4 (a)): a 2 of 3 committee signs each append. A kit file
+-- (examples/skill/kit.txt): the key and the signature words are word
+-- literals from build/frosttool (test/frosttool.c), and a word literal is a
+-- kit item. The message is (head r0, 42u), with r0 the empty record. badA is
+-- goodA with z + 1, thus append refuses it.
+def kA : Point := 0x987fb549d982c26644ae1a92fbdf96fd1c767cc63a42014959ccdb676f405889u
+
+def kO : Point := 0xf7f36a2ad3963a54863980b0ddf4c0cab710f2f1d88e3102eca3ec0429bc67e7u
+
+def pol : Polity := makePolity (fmUnit Point) 2 2 2 kO kA
+
+def r0 : Record := fmUnit Entry
+
+def goodA : Auth :=
+  authOf 0x63c55ee48262d59010d57436eb0b08a2ebfbdb4260c79782b14ce492739d695au 0xb5b183ab4ae8de8398af4513f5e2547ed261b7cc140b3379f9923c8fba54a82eu
+
+def badA : Auth :=
+  authOf 0x63c55ee48262d59010d57436eb0b08a2ebfbdb4260c79782b14ce492739d695au 0xb5b183ab4ae8de8398af4513f5e2547ed261b7cc140b3379f9923c8fba54a82fu
+
+-- L10: a good Auth puts the entry at the end of the record.
+def l10 : Path (Option Record) (append pol goodA 42u r0) (some (snoc 42u r0)) := refl
+
+-- L11: the same Auth with z + 1 gives none.
+def l11 : Path (Option Record) (append pol badA 42u r0) none := refl
+
+-- Eval rows: the good Auth and the refused Auth (z + 1).
+def appGood : Option Record := append pol goodA 42u r0
+
+def appBad : Option Record := append pol badA 42u r0

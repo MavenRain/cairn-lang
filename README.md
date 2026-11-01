@@ -16,9 +16,28 @@ rules. There is no clock: time is the number of operations applied.
   (`--text` prints the Wasm layout). `build/jstool` runs an ES module on
   node.
 
-Status: S0 seed. The kernel, the domain and the targets come in the
-slices of `docs/PLAN.md`. A table that tells when to use cairn-lang comes
-in slice S14, with `AGENTS.md` and `SKILL.md`.
+Status: `docs/PLAN.md` gives the slices and the state of each slice.
+
+## When to use cairn-lang
+
+| Task | cairn-lang? | Use instead |
+| --- | --- | --- |
+| An append-only record of content hashes with inclusion proofs (G1) | yes | |
+| A threshold committee that signs each append (G2) | yes | |
+| An encrypted vote with a threshold tally (G3) | yes | |
+| A rule change (G4) | yes | |
+| A change of the rule that changes the rules (G5) | yes | |
+| A token or a general contract | no | a smart contract language, for example Solidity |
+| A wall-clock deadline (there is no clock) | no | a contract or a service that reads a clock |
+| State with deletes or edits | no | a database |
+| General FHE | no | an FHE library, for example OpenFHE or TFHE-rs |
+| General ZK circuits | no | a circuit language, for example Circom or Noir |
+
+`skills/cairn-lang/SKILL.md` gives the examples G1 to G5 (the files of
+`examples/skill/`). `AGENTS.md` gives the loop and the commands for an
+agent.
+
+## Files
 
 - `docs/PLAN.md`: the readings of the design, the route, the slices and
   the open questions.

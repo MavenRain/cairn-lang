@@ -1,0 +1,44 @@
+-- G4 (S14, Q-S14-2 (a)): a rule change. A guest file: it names the domain
+-- defs only. The polity s0 has 3 members and each threshold two. pAppend
+-- sets tAppend to three. stepD enacts a proposal when its yes count meets
+-- tAmend, else it keeps the polity.
+def zero : Count := len Point (fmUnit Point)
+
+def one : Count := opSucc zero
+
+def two : Count := opSucc one
+
+def three : Count := opSucc two
+
+def r0 : Record := fmUnit Entry
+
+def k1 : Point := head r0
+
+def r1 : Record := snoc k1 r0
+
+def k2 : Point := head r1
+
+def r2 : Record := snoc k2 r1
+
+def k3 : Point := head r2
+
+def crew : FreeMon Point :=
+  fmMul Point (fmMul Point (fmEta Point k1) (fmEta Point k2)) (fmEta Point k3)
+
+def s0 : Polity := makePolity crew two two two k1 k2
+
+def pAppend : Proposal := makePolity crew three two two k1 k3
+
+-- L8 on the closed s0 (tAmend two): a yes count of two meets the threshold,
+-- so the step enacts p.
+def l8 : (p : Proposal) -> Path Polity (stepD s0 (pair p two)) p := fun (p : Proposal) => refl
+
+-- Eval rows: decideYes at and below the threshold, and tAppend after the
+-- step with two yes votes (enacted) and with one (refused).
+def decideExact : Verdict := decideYes s0 two
+
+def decideShort : Verdict := decideYes s0 one
+
+def g4Append : Count := tAppend (stepD s0 (pair pAppend two))
+
+def g4Refused : Count := tAppend (stepD s0 (pair pAppend one))

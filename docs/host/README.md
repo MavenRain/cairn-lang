@@ -227,6 +227,10 @@ what the domain holds and how to change it.
 | `mcp negatives: 3 of 3` | `build/mcptool` exits 1 on each of 3 bad inputs: a copy of the `explain` row with one more byte in its `.out`, a row with no `.out`, and no row |
 | `mcp tools: 5 of 5` | each of the 5 tools (`check`, `fmt`, `eval`, `build`, `explain`) has a `tools/call` request in a `test/mcp/*.in` row |
 | `explain codes: 17 of 17` | the `REFUSE_` codes in `src` (not in `src/front/codes.c`) are the codes of the `src/front/codes.c` table, and for each code `langc explain CODE` exits 0 with one line `CODE: ...` and no stderr |
+| `skill checks: 5 of 5` | for each `examples/skill/X.lang`, `langc check` (`langc --kit check` when `X.lang` is a line of `examples/skill/kit.txt`) gives `ok`, and `langc fmt examples/skill/X.lang --check` exits 0 with no output |
+| `skill quotes: 5 of 5` | `build/skilltool` finds that the program block of each example G1 to G5 of `skills/cairn-lang/SKILL.md` is byte equal to the file that its `File:` line names |
+| `skill outputs: 14 of 14` | `build/skilltool` runs each `langc` row of the 5 examples: the output gives the bytes of its text block, and the exit code is the one of its sentence |
+| `skill negatives: 3 of 3` | `build/skilltool test/skill/X.md 1` exits 1 with the FAIL line of the change on each of 3 fixtures: the G1 section with a changed program byte, with no text block and with a wrong exit code |
 | `gate: 0 failures` | the sum of all failures |
 
 `make check` also runs `test/jstest.c` against an ES module with entries

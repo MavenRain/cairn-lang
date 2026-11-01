@@ -1,0 +1,43 @@
+-- G5 (S14, Q-S14-2 (a)): a self change. A guest file: it names the domain
+-- defs only. s0 has each threshold two. pLower lowers tAmend to one, thus
+-- after it pOpen passes with one yes vote and sets tOpen to three. amendAll
+-- steps each decided proposal in turn, the left factor first (L9).
+def zero : Count := len Point (fmUnit Point)
+
+def one : Count := opSucc zero
+
+def two : Count := opSucc one
+
+def three : Count := opSucc two
+
+def r0 : Record := fmUnit Entry
+
+def k1 : Point := head r0
+
+def r1 : Record := snoc k1 r0
+
+def k2 : Point := head r1
+
+def r2 : Record := snoc k2 r1
+
+def k3 : Point := head r2
+
+def crew : FreeMon Point :=
+  fmMul Point (fmMul Point (fmEta Point k1) (fmEta Point k2)) (fmEta Point k3)
+
+def s0 : Polity := makePolity crew two two two k1 k2
+
+def pLower : Proposal := makePolity crew two one two k1 k2
+
+def pOpen : Proposal := makePolity crew two one three k1 k2
+
+-- L9: amendAll folds the left factor first.
+def l9 : (ps : FreeMon Decided) -> (qs : FreeMon Decided) -> (s : Polity) -> Path Polity (amendAll (fmMul Decided ps qs) s) (amendAll qs (amendAll ps s)) :=
+  fun (ps : FreeMon Decided) (qs : FreeMon Decided) (s : Polity) => refl
+
+-- Eval rows: tOpen after pLower (two yes votes) then pOpen (one yes vote),
+-- and after pOpen alone (one yes vote, refused).
+def g5Open : Count :=
+  tOpen (amendAll (fmMul Decided (fmEta Decided (pair pLower two)) (fmEta Decided (pair pOpen one))) s0)
+
+def g5Refused : Count := tOpen (amendAll (fmEta Decided (pair pOpen one)) s0)

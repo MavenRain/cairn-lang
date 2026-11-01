@@ -852,6 +852,50 @@ for code in $(cat "$tmp/codes.src"); do
 done
 echo "explain codes: $codes of $(($(wc -l <"$tmp/codes.src")))"
 # mcp rows: end
+# skill rows: begin
+# The skill rows (S14, Q-S14-5 (a)). Each examples/skill/*.lang checks to ok
+# (`langc --kit check` when it is a line of examples/skill/kit.txt) and
+# `langc fmt PROG --check` accepts it with no output. build/skilltool compares the
+# program block of each example of skills/cairn-lang/SKILL.md with its file
+# and runs each row: the output equals the text block and the exit code
+# equals the sentence. build/skilltool exits 1 with the FAIL line of the
+# change on each of the 3 fixtures of test/skill/ (the G1 section with a
+# changed program byte, no text block and a wrong exit code); their lines go
+# to $tmp, not to the log.
+checked=0
+for prog in examples/skill/*.lang; do
+  out=$(build/langc $(kit examples/skill/kit.txt "${prog#examples/skill/}") check "$prog" 2>&1) || true
+  status=0
+  build/langc fmt "$prog" --check >"$tmp/skill.fmt" 2>&1 || status=$?
+  if [ "$out" = "ok" ] && [ "$status" -eq 0 ] && [ ! -s "$tmp/skill.fmt" ]; then
+    checked=$((checked + 1))
+  else
+    echo "FAIL skill check $prog: $out; fmt --check exit $status"
+    fail=$((fail + 1))
+  fi
+done
+echo "skill checks: $checked of 5"
+status=0
+build/skilltool || status=$?
+[ "$status" -eq 0 ] || { echo "FAIL skill: build/skilltool exit $status"; fail=$((fail + 1)); }
+# skill_negative NAME LINE: build/skilltool test/skill/NAME.md 1 exits 1 and
+# writes the line LINE.
+skill_negative() {
+  status=0
+  build/skilltool "test/skill/$1.md" 1 >"$tmp/skill.out" 2>&1 || status=$?
+  if [ "$status" -eq 1 ] && rg -q -x -F -- "$2" "$tmp/skill.out"; then
+    neg=$((neg + 1))
+  else
+    echo "FAIL skill negative $1: exit $status"
+    fail=$((fail + 1))
+  fi
+}
+neg=0
+skill_negative changed-quote "FAIL: skill: G1: the program block is not examples/skill/g1-record.lang"
+skill_negative no-text "FAIL: skill: G1: the row at line 54 has no command, text block or exit sentence"
+skill_negative bad-exit "FAIL: skill: G1: \`build/langc check examples/skill/g1-record.lang\` exits 0, the sentence gives '1.'"
+echo "skill negatives: $neg of 3"
+# skill rows: end
 
 status=0
 build/langc 2>/dev/null || status=$?

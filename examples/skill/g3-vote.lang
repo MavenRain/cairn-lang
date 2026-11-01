@@ -1,0 +1,58 @@
+-- G3 (S14, Q-S14-2 (a)): an encrypted vote with a threshold tally. A guest
+-- file: it names the domain defs only. b1, b2 and b3 seal a yes, a no and a
+-- yes vote; the points are head digests (no literal). tallyBox adds the
+-- sealed votes of a box under encryption, and a quorum opens the sum.
+def r0 : Record := fmUnit Entry
+
+def k1 : Point := head r0
+
+def r1 : Record := snoc k1 r0
+
+def k2 : Point := head r1
+
+def r2 : Record := snoc k2 r1
+
+def k3 : Point := head r2
+
+def r3 : Record := snoc k3 r2
+
+def k4 : Point := head r3
+
+def b1 : SealedBallot := mkBallot verdictYes k2
+
+def b2 : SealedBallot := mkBallot verdictNo k3
+
+def b3 : SealedBallot := mkBallot verdictYes k4
+
+def box0 : Box := fmUnit SealedBallot
+
+def box1 : Box := fmMul SealedBallot box0 (fmEta SealedBallot b1)
+
+def box3 : Box :=
+  fmMul SealedBallot (fmMul SealedBallot box1 (fmEta SealedBallot b2)) (fmEta SealedBallot b3)
+
+-- L6 on closed boxes of 0, 1 and 3 ballots: the opened tally is the count of
+-- the plain votes.
+def l6Zero : (q : Quorum) -> Path Count (open Count q (tallyBox box0)) (countVotes (fmMap SealedBallot Verdict (fun (x : SealedBallot) => decrypt Verdict (ballotVote x)) box0)) :=
+  fun (q : Quorum) => refl
+
+def l6One : (q : Quorum) -> Path Count (open Count q (tallyBox box1)) (countVotes (fmMap SealedBallot Verdict (fun (x : SealedBallot) => decrypt Verdict (ballotVote x)) box1)) :=
+  fun (q : Quorum) => refl
+
+def l6Three : (q : Quorum) -> Path Count (open Count q (tallyBox box3)) (countVotes (fmMap SealedBallot Verdict (fun (x : SealedBallot) => decrypt Verdict (ballotVote x)) box3)) :=
+  fun (q : Quorum) => refl
+
+-- L7: open is decrypt for each quorum and ciphertext.
+def l7 : (q : Quorum) -> (c : Enc Count) -> Path Count (open Count q c) (decrypt Count c) :=
+  fun (q : Quorum) (c : Enc Count) => refl
+
+-- Eval rows: the tally of 0, 1 and 3 ballots and the plain count of the 3
+-- votes.
+def tallyZero : Enc Count := tallyBox box0
+
+def tallyOne : Enc Count := tallyBox box1
+
+def tallyThree : Enc Count := tallyBox box3
+
+def countThree : Count :=
+  countVotes (fmMul Verdict (fmMul Verdict (fmEta Verdict verdictYes) (fmEta Verdict verdictNo)) (fmEta Verdict verdictYes))

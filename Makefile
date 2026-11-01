@@ -29,11 +29,12 @@ WASMTIME_FILES = $(WASMTIME)/include/wasmtime.h $(WASMTIME)/lib/libwasmtime.dyli
 PATH_TOOL = test/pathtool.c $(filter-out src/front/front.c,$(FRONT))
 RUN_TOOL = test/runtool.c $(FRONT)
 MCP_TOOL = test/mcptool.c
+SKILL_TOOL = test/skilltool.c
 HEADERS = $(wildcard src/*.h src/front/*.h)
 
 .PHONY: build check check-clang clean gpu-check
 
-build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/mcptool
+build: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/mcptool build/skilltool
 
 build/domain.c: domain/domain.lang gen/embed.c
 	mkdir -p build
@@ -109,6 +110,10 @@ build/mcptool: $(MCP_TOOL)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/mcptool $(MCP_TOOL)
 
+build/skilltool: $(SKILL_TOOL)
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/skilltool $(SKILL_TOOL)
+
 check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(SRC) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(FRONT_TOOL)
@@ -128,8 +133,9 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(WGSL_TOOL)
 	$(CC) $(CLANG_FLAGS) test/jstest.c
 	$(CC) $(CLANG_FLAGS) $(MCP_TOOL)
+	$(CC) $(CLANG_FLAGS) $(SKILL_TOOL)
 
-check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/mcptool build/jstest check-clang
+check: build/langc build/fronttool build/blsagtool build/elgamaltool build/thresholdtool build/dkgtool build/sigmatool build/frosttool build/ballottool build/secptool build/shatool build/pathtool build/runtool build/wasmtool build/jstool build/wgsltool build/mcptool build/skilltool build/jstest check-clang
 	sh test/gate.sh
 	sh test/run.sh
 	sh test/review.sh
