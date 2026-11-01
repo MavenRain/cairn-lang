@@ -14,6 +14,8 @@
 #include "front/front.h"
 #include "front/lower.h"
 #include "target.h"
+#include "front/codes.h"
+#include "mcp.h"
 
 #define ARENA_LIMIT_BYTES ((size_t)1 << 30)
 
@@ -25,14 +27,16 @@ typedef enum {
   CMD_ABI,
   CMD_BUILD,
   CMD_PROVE,
-  CMD_FMT
+  CMD_FMT,
+  CMD_EXPLAIN,
+  CMD_MCP
 } Command;
 
 typedef struct {
   Command command;
   const char *prog_path;
   const char *entry;
-  char **args;
+  char *const *args; /* argv, or the arguments of the MCP eval tool */
   int arg_count;
   const char *script_path;
   const char *out_path;
@@ -42,6 +46,9 @@ typedef struct {
   int json;
   int fmt_check; /* fmt --check (S11 A1): compare PROG with its canonical text */
   CheckMode mode; /* orbit-lang S3: --kit selects the kit mode */
+  const char *code; /* explain CODE (S13 Q-S13-7 (a)) */
+  FILE *out; /* stdout, or the output of an MCP tool (S13 Q-S13-3 (a)) */
+  FILE *err; /* stderr, or the error output of an MCP tool */
 } Options;
 
 static const struct {
@@ -56,6 +63,8 @@ static const struct {
   {"build", CMD_BUILD},
   {"prove", CMD_PROVE},
   {"fmt", CMD_FMT},
+  {"explain", CMD_EXPLAIN},
+  {"mcp", CMD_MCP},
 };
 
 static int usage(FILE *err) {
@@ -67,6 +76,8 @@ static int usage(FILE *err) {
         "       langc [--kit] build PROG (-o OUT | --js OUT.mjs | --wgsl OUT.wgsl) [--runtime]\n"
         "       langc [--kit] prove PROG NAME [POLL]\n"
         "       langc fmt PROG [--check]\n"
+        "       langc explain CODE\n"
+        "       langc [--kit] mcp\n"
         "--kit: the kit mode, the trusted test scope of the kit gate\n", err);
   return 2;
 }
@@ -106,7 +117,7 @@ static int parse_build_options(int argc, char **argv, Options *opt, Diag *diag) 
 
 static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
   memset(opt, 0, sizeof *opt);
-  if (argc < 3 || !find_command(argv[1], &opt->command)) {
+  if (argc < 2 || !find_command(argv[1], &opt->command) || (argc < 3 && opt->command != CMD_MCP)) {
     return diag_fail(diag, "USAGE", NULL, "expected a command and a program path");
   }
   opt->prog_path = argv[2];
@@ -147,6 +158,11 @@ static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
       opt->fmt_check = argc == 4;
       return argc == 3 || (argc == 4 && strcmp(argv[3], "--check") == 0) ? 1
         : diag_fail(diag, "USAGE", NULL, "fmt takes only --check after the program");
+    case CMD_EXPLAIN:
+      opt->code = argv[2];
+      return argc == 3 ? 1 : diag_fail(diag, "USAGE", NULL, "explain takes only a code");
+    case CMD_MCP:
+      return argc == 2 ? 1 : diag_fail(diag, "USAGE", NULL, "mcp takes no arguments");
   }
   return 0;
 }
@@ -176,6 +192,8 @@ static const char *command_word(Command command) {
     case CMD_BUILD: return "build";
     case CMD_PROVE: return "prove";
     case CMD_FMT: return "fmt";
+    case CMD_EXPLAIN: return "explain";
+    case CMD_MCP: return "mcp";
   }
   return "?";
 }
@@ -223,7 +241,7 @@ static int json_abi_entry(const IrFunc *fn, int first, FILE *out) {
 
 /* The ABI comes from checked types, independently of lowering. An omitted
    IR function must not disappear from both sides of the gate's count check. */
-static int print_abi(Machine *machine, int json) {
+static int print_abi(Machine *machine, int json, FILE *out, FILE *err) {
   uint32_t i;
   uint32_t k;
   uint32_t count = 0;
@@ -232,7 +250,7 @@ static int print_abi(Machine *machine, int json) {
   IrScalar params[ENTRY_PARAMS_MAX];
   memset(&fn, 0, sizeof fn);
   fn.params = params;
-  if (json) fputs("{\"entries\":[", stdout);
+  if (json) fputs("{\"entries\":[", out);
   for (i = 0; i < machine->def_count; i++) {
     machine->fuel = EVAL_FUEL_STEPS;
     if (machine->defs[i].origin != ORIGIN_PROGRAM || !entry_of(machine, machine->defs[i].type, &entry))
@@ -242,10 +260,10 @@ static int print_abi(Machine *machine, int json) {
     for (k = 0; k < entry.param_count; k++)
       params[k] = entry.param_flag[k] ? IR_SCALAR_FLAG : entry.param_u256[k] ? IR_SCALAR_U256 : IR_SCALAR_NAT;
     fn.result = entry.result_flag ? IR_SCALAR_FLAG : entry.result_u256 ? IR_SCALAR_U256 : IR_SCALAR_NAT;
-    if (!(json ? json_abi_entry(&fn, count++ == 0, stdout) : target_abi_line(&fn, stdout, stderr)))
+    if (!(json ? json_abi_entry(&fn, count++ == 0, out) : target_abi_line(&fn, out, err)))
       return 1;
   }
-  if (json) fputs("]}\n", stdout);
+  if (json) fputs("]}\n", out);
   return machine->diag->set ? 1 : 0;
 }
 
@@ -254,11 +272,11 @@ static int run_target(const Options *opt, Machine *machine, Diag *diag) {
   IrProgram prog;
   FILE *out;
   int ok = 1;
-  if (opt->command == CMD_ABI) return print_abi(machine, opt->json);
-  if (!lower_program(machine, &prog)) return 1;
+  if (opt->command == CMD_ABI) return print_abi(machine, opt->json, opt->out, opt->err);
+  if (!lower_program(machine, &prog, opt->err)) return 1;
   switch (opt->command) {
     case CMD_IR:
-      ir_print(&prog, stdout);
+      ir_print(&prog, opt->out);
       return 0;
     case CMD_ABI:
     case CMD_CHECK:
@@ -267,13 +285,15 @@ static int run_target(const Options *opt, Machine *machine, Diag *diag) {
     case CMD_PROVE:
     case CMD_BUILD:
     case CMD_FMT:
+    case CMD_EXPLAIN:
+    case CMD_MCP:
       break;
   }
   out = fopen(opt->out_path, "wb");
   if (out == NULL) return diag_fail(diag, "IO", NULL, "cannot write '%s'", opt->out_path) + 2;
-  ok = opt->wgsl ? wgsl_write(&prog, out, stderr)
-       : opt->js ? js_write(&prog, out, stderr)
-                 : target_write(&prog, opt->runtime ? TARGET_PART_RUNTIME : TARGET_PART_MAIN, out, stderr);
+  ok = opt->wgsl ? wgsl_write(&prog, out, opt->err)
+       : opt->js ? js_write(&prog, out, opt->err)
+                 : target_write(&prog, opt->runtime ? TARGET_PART_RUNTIME : TARGET_PART_MAIN, out, opt->err);
   ok = fclose(out) == 0 && ok;
   if (ok) return 0;
   remove(opt->out_path);
@@ -292,7 +312,7 @@ static int check_json(const Options *opt, Arena *arena, const char *text, size_t
   int ok = front_load(arena, opt->prog_path, text, len, &decls, diag)
       && check_program_progress(arena, &decls, &machine, diag, opt->mode, &progress);
   if (!ok && diag->code != NULL && strcmp(diag->code, "OOM") == 0) return 2;
-  json_check(stdout, opt->prog_path, diag, &progress);
+  json_check(opt->out, opt->prog_path, diag, &progress);
   return ok ? 0 : 1;
 }
 
@@ -307,24 +327,26 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
   if (!check_program(arena, &decls, &machine, diag, opt->mode)) return 1;
   switch (opt->command) {
     case CMD_CHECK:
-      puts("ok");
+      fputs("ok\n", opt->out);
       return 0;
     case CMD_EVAL:
-      return eval_command(&machine, opt->entry, opt->args, opt->arg_count, stdout, stderr);
+      return eval_command(&machine, opt->entry, opt->args, opt->arg_count, opt->out, opt->err);
     case CMD_RUN: {
       char *script = NULL;
       size_t script_len = 0;
       if (!read_source(arena, opt->script_path, &script, &script_len, diag)) return 2;
-      return run_command(&machine, opt->script_path, script, script_len, stdout);
+      return run_command(&machine, opt->script_path, script, script_len, opt->out);
     }
     case CMD_PROVE:
       signal(SIGPIPE, SIG_IGN);
-      return prove_command(&machine, opt->entry, opt->arg_count == 1 ? opt->args[0] : NULL, stdout, stderr);
+      return prove_command(&machine, opt->entry, opt->arg_count == 1 ? opt->args[0] : NULL, opt->out, opt->err);
     case CMD_ABI:
     case CMD_IR:
     case CMD_BUILD:
       return run_target(opt, &machine, diag);
     case CMD_FMT: /* main runs run_fmt */
+    case CMD_EXPLAIN: /* main runs run_explain */
+    case CMD_MCP: /* main runs mcp_serve */
       break;
   }
   diag_fail(diag, "INTERNAL", NULL, "no handler for the %s command", command_word(opt->command));
@@ -360,12 +382,86 @@ static int run_fmt(const Options *opt, Arena *arena, Diag *diag) {
   if (!fmt_validate(&out, opt->prog_path, diag)) return strcmp(diag->code, "OOM") == 0 ? 2 : 1;
   if (opt->fmt_check) {
     size_t line = first_diff_line(text, len, &out);
-    if (line != 0) fprintf(stderr, "%s:%zu: not canonical\n", opt->prog_path, line);
+    if (line != 0) fprintf(opt->err, "%s:%zu: not canonical\n", opt->prog_path, line);
     return line != 0;
   }
-  size_t written = out.len == 0 ? 0 : fwrite(out.data, 1, out.len, stdout);
-  if (written != out.len || fflush(stdout) != 0) return diag_fail(diag, "IO", NULL, "cannot write the canonical text") + 2;
+  size_t written = out.len == 0 ? 0 : fwrite(out.data, 1, out.len, opt->out);
+  if (written != out.len || fflush(opt->out) != 0) return diag_fail(diag, "IO", NULL, "cannot write the canonical text") + 2;
   return 0;
+}
+
+/* langc explain CODE (S13 Q-S13-7 (a), Q-S13-10 (a)): one line on OUT,
+   `CODE: MEANING (docs/host/README.md, SECTION)`, and exit 0. An unknown
+   code is exit 1 with an EXPLAIN diag. It reads no program and uses no
+   arena, so the MCP tool can call it with its own OUT. */
+static int run_explain(const Options *opt, Diag *diag, FILE *out) {
+  const CodeRow *row = code_find(opt->code);
+  if (row == NULL) return diag_fail(diag, "EXPLAIN", NULL, "'%s' is not a code of docs/host/README.md", opt->code) + 1;
+  fprintf(out, "%s: %s (docs/host/README.md, %s)\n", row->code, row->meaning, row->section);
+  return fflush(out) == 0 ? 0 : diag_fail(diag, "IO", NULL, "cannot write the explain line") + 2;
+}
+
+/* The diag rule of main, on the err of OPT: fmt --check prints its own
+   `PROG:LINE: not canonical` line, with no diag; check --json puts the
+   diag of exit 1 in its JSON line (Q-S12-7). Returns STATUS. */
+static int finish_status(const Options *opt, Diag *diag, int status) {
+  int in_json = opt->command == CMD_CHECK && opt->json && status == 1;
+  if (status != 0 && !in_json && (opt->command != CMD_FMT || diag->set)) diag_print(diag, opt->err);
+  return status;
+}
+
+/* The check mode of `langc [--kit] mcp`: main sets it before mcp_serve. */
+static CheckMode mcp_mode = CHECK_GUEST;
+
+/* TOOL on OPT, ARENA and DIAG, as the CLI runs the verb. mcp.c checks ARGS
+   before the call, so each case trusts the fields of its tool. */
+static int mcp_run(McpTool tool, const McpArgs *args, Options *opt, Arena *arena, Diag *diag) {
+  switch (tool) {
+    case MCP_TOOL_CHECK:
+      opt->command = CMD_CHECK;
+      opt->json = 1;
+      return run(opt, arena, diag);
+    case MCP_TOOL_FMT:
+      opt->command = CMD_FMT;
+      return run_fmt(opt, arena, diag);
+    case MCP_TOOL_EVAL:
+      opt->command = CMD_EVAL;
+      opt->entry = args->name;
+      opt->args = args->args;
+      opt->arg_count = args->arg_count;
+      return run(opt, arena, diag);
+    case MCP_TOOL_BUILD:
+      opt->command = CMD_BUILD;
+      opt->out_path = args->out_path;
+      opt->runtime = args->target == MCP_TARGET_RUNTIME;
+      opt->js = args->target == MCP_TARGET_JS;
+      opt->wgsl = args->target == MCP_TARGET_WGSL;
+      return run(opt, arena, diag);
+    case MCP_TOOL_EXPLAIN:
+      opt->command = CMD_EXPLAIN;
+      opt->code = args->code;
+      return run_explain(opt, diag, opt->out);
+  }
+  return diag_fail(diag, "INTERNAL", NULL, "no handler for the MCP tool") + 1;
+}
+
+/* The tools of `langc mcp` (mcp.h): each call has fresh Options, a fresh
+   Diag and a fresh Arena that is released after the call (S13 Q-S13-3
+   (a)), and prints its output on OUT and its diag on ERR. */
+static int mcp_tool(McpTool tool, const McpArgs *args, FILE *out, FILE *err) {
+  Options opt;
+  memset(&opt, 0, sizeof opt);
+  opt.mode = mcp_mode;
+  opt.out = out;
+  opt.err = err;
+  opt.prog_path = args->path;
+  Diag diag;
+  diag_init(&diag);
+  Arena arena;
+  arena_init(&arena, ARENA_LIMIT_BYTES);
+  int status = mcp_run(tool, args, &opt, &arena, &diag);
+  arena_release(&arena);
+  return finish_status(&opt, &diag, status);
 }
 
 int main(int argc, char **argv) {
@@ -378,13 +474,19 @@ int main(int argc, char **argv) {
     return usage(stderr);
   }
   opt.mode = kit ? CHECK_KIT : CHECK_GUEST;
+  opt.out = stdout;
+  opt.err = stderr;
+  /* mcp serves the tools on stdin and stdout to the end of stdin; each
+     call has its own Options, Diag and Arena (S13 Q-S13-3 (a)). */
+  if (opt.command == CMD_MCP) {
+    mcp_mode = opt.mode;
+    return mcp_serve(stdin, stdout, mcp_tool);
+  }
+  /* explain runs before the arena work (S13 Q-S13-7 (a)). */
+  if (opt.command == CMD_EXPLAIN) return finish_status(&opt, &diag, run_explain(&opt, &diag, opt.out));
   Arena arena;
   arena_init(&arena, ARENA_LIMIT_BYTES);
   int status = opt.command == CMD_FMT ? run_fmt(&opt, &arena, &diag) : run(&opt, &arena, &diag);
   arena_release(&arena);
-  /* fmt --check prints its own `PROG:LINE: not canonical` line, with no diag;
-     check --json puts the diag of exit 1 in its JSON line (Q-S12-7). */
-  int in_json = opt.command == CMD_CHECK && opt.json && status == 1;
-  if (status != 0 && !in_json && (opt.command != CMD_FMT || diag.set)) diag_print(&diag, stderr);
-  return status;
+  return finish_status(&opt, &diag, status);
 }

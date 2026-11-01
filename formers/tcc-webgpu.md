@@ -7,7 +7,7 @@ The WGSL target uses the rows of `formers/tcc-wasm.md`, as
 builtin table, and `src/front/lower.c` lowers a program to the IR of
 `src/ir.h`. `src/wgsl.c` writes that IR as a WGSL compute module (`langc
 build PROG --wgsl OUT.wgsl`, S10; `wgsl_write` at `src/wgsl.c:1078`,
-called from `src/main.c:274`). Each module gets the runtime of `RUNTIME`
+called from `src/main.c:294`). Each module gets the runtime of `RUNTIME`
 (`src/wgsl.c:76`). A module that calls a u256, hash or curve operation
 also gets `LIMB_PART`, `SHA_PART` or `EC_PART` (`src/wgsl.c:205`,
 `src/wgsl.c:329`, `src/wgsl.c:412`), from the need mask of its IR call

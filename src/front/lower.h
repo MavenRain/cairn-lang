@@ -7,8 +7,9 @@
 #include "ir.h"
 
 /* Lowers each entry of the checked program M (a PROGRAM definition where
-   entry_of holds) into PROG. Returns 1, or 0 after a diagnostic. */
-int lower_program(Machine *m, IrProgram *prog);
+   entry_of holds) into PROG. Writes notes to ERR. Returns 1, or 0 after
+   a diagnostic. */
+int lower_program(Machine *m, IrProgram *prog, FILE *err);
 /* Writes PROG as text: a `func` line for each entry, then one statement on
    each line. */
 void ir_print(const IrProgram *prog, FILE *out);

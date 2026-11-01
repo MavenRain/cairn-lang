@@ -782,6 +782,76 @@ echo "json rows: $jrows passed"
 echo "json refusal codes: $jcodes of $jwant"
 echo "json fixes: $jfixes passed"
 # json rows: end
+# mcp rows: begin
+# Each test/mcp/NAME.in is a row (S13): build/mcptool runs `langc mcp`
+# (`langc --kit mcp` when NAME starts with kit-) with NAME.in on stdin. The
+# stdout equals test/mcp/NAME.out byte for byte, the stderr is empty and the
+# exit is 0. The rows call each of the 5 tools. The REFUSE_ codes of src
+# (src/front/codes.c aside) are the rows of src/front/codes.c, and
+# `langc explain CODE` writes one line `CODE: ...` and nothing on stderr for
+# each. build/mcptool exits 1 on each of 3 bad inputs: a changed .out, a
+# missing .out and no rows (its FAIL lines go to $tmp, not to the log).
+status=0
+build/mcptool test/mcp/*.in || status=$?
+[ "$status" -eq 0 ] || { echo "FAIL mcp: build/mcptool exit $status"; fail=$((fail + 1)); }
+mkdir -p "$tmp/neg"
+cp test/mcp/explain.in test/mcp/explain.out "$tmp/neg/"
+printf x >>"$tmp/neg/explain.out"
+neg=0
+status=0
+build/mcptool "$tmp/neg/explain.in" >"$tmp/neg.out" 2>&1 || status=$?
+if [ "$status" -eq 1 ]; then
+  neg=$((neg + 1))
+else
+  echo "FAIL mcp negative changed .out: exit $status"
+  fail=$((fail + 1))
+fi
+cp test/mcp/explain.out "$tmp/neg/explain.out"
+cp test/mcp/explain.in "$tmp/neg/kit-explain.in"
+status=0
+build/mcptool "$tmp/neg/explain.in" "$tmp/neg/kit-explain.in" >"$tmp/neg.out" 2>&1 || status=$?
+if [ "$status" -eq 1 ]; then
+  neg=$((neg + 1))
+else
+  echo "FAIL mcp negative missing .out: exit $status"
+  fail=$((fail + 1))
+fi
+status=0
+build/mcptool >"$tmp/neg.out" 2>&1 || status=$?
+if [ "$status" -eq 1 ]; then
+  neg=$((neg + 1))
+else
+  echo "FAIL mcp negative no rows: exit $status"
+  fail=$((fail + 1))
+fi
+echo "mcp negatives: $neg of 3"
+tools=0
+for t in check fmt eval build explain; do
+  if rg -qF -- "\"method\":\"tools/call\",\"params\":{\"name\":\"$t\"" test/mcp/*.in; then
+    tools=$((tools + 1))
+  else
+    echo "FAIL mcp tools: no row of test/mcp calls $t"
+    fail=$((fail + 1))
+  fi
+done
+echo "mcp tools: $tools of 5"
+rg -o --no-filename 'REFUSE_[A-Z0-9_]+' src -g '!codes.c' | sort -u >"$tmp/codes.src"
+awk -F '"' '$1 == "  {" && $2 ~ /^REFUSE_/ {print $2}' src/front/codes.c | sort -u >"$tmp/codes.rows"
+cmp -s "$tmp/codes.src" "$tmp/codes.rows" || { echo "FAIL explain codes: the REFUSE_ codes of src are not the rows of src/front/codes.c"; fail=$((fail + 1)); }
+codes=0
+for code in $(cat "$tmp/codes.src"); do
+  status=0
+  build/langc explain "$code" >"$tmp/explain.out" 2>"$tmp/explain.err" </dev/null || status=$?
+  lines=$(($(wc -l <"$tmp/explain.out")))
+  if [ "$status" -eq 0 ] && [ "$lines" -eq 1 ] && rg -q "^$code: " "$tmp/explain.out" && [ ! -s "$tmp/explain.err" ]; then
+    codes=$((codes + 1))
+  else
+    echo "FAIL explain $code: exit $status, $lines lines"
+    fail=$((fail + 1))
+  fi
+done
+echo "explain codes: $codes of $(($(wc -l <"$tmp/codes.src")))"
+# mcp rows: end
 
 status=0
 build/langc 2>/dev/null || status=$?

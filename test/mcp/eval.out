@@ -1,0 +1,3 @@
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"cairn-lang","version":"S13"}}}
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"inr unit\n"}],"isError":false}}
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":""},{"type":"text","text":"langc: REFUSE_KIT: addPrice: Nat is a kit item outside the base span (PLAN section 4); only the kit mode langc --kit admits it\n"}],"isError":true}}

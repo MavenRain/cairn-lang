@@ -1,0 +1,2 @@
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"cairn-lang","version":"S13"}}}
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"diagnostics\":[],\"progress\":{\"parsed\":7,\"typed\":7,\"laws_discharged\":0,\"laws_total\":0}}\n"}],"isError":false}}

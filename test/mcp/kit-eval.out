@@ -1,0 +1,7 @@
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"cairn-lang","version":"S13"}}}
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"5\n"}],"isError":false}}
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":""},{"type":"text","text":"langc: EVAL_ENTRY: nope: no definition has this name\n"}],"isError":true}}
+{"jsonrpc":"2.0","id":4,"error":{"code":-32602,"message":"Invalid params"}}
+{"jsonrpc":"2.0","id":5,"error":{"code":-32602,"message":"Invalid params"}}
+{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"5\n"}],"isError":false}}
+{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":""},{"type":"text","text":"langc: note: mk: a family result has no target form (O24)\n"}],"isError":false}}

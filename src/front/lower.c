@@ -1896,7 +1896,7 @@ static int lower_entry(Machine *m, uint32_t index, const Entry *e, IrFunc *fn) {
   return 1;
 }
 
-int lower_program(Machine *m, IrProgram *prog) {
+int lower_program(Machine *m, IrProgram *prog, FILE *err) {
   IrFunc *funcs = arena_alloc(m->arena, ((size_t)m->def_count + 1u) * sizeof *funcs);
   Entry e;
   size_t n = 0;
@@ -1911,7 +1911,7 @@ int lower_program(Machine *m, IrProgram *prog) {
     m->fuel = EVAL_FUEL_STEPS;
     entry = m->defs[i].origin == ORIGIN_PROGRAM && entry_of(m, m->defs[i].type, &e);
     if (!entry && m->defs[i].origin == ORIGIN_PROGRAM && family_result_of(m, m->defs[i].type))
-      fprintf(stderr, "langc: note: %s: a family result has no target form (O24)\n", m->defs[i].name);
+      fprintf(err, "langc: note: %s: a family result has no target form (O24)\n", m->defs[i].name);
     if (entry && !lower_entry(m, i, &e, &funcs[n]))
       return 0;
     n += entry ? 1u : 0u;

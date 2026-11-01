@@ -73,6 +73,14 @@ The compiler enforces these rules:
 | R3 | `REFUSE_REC` | `def rec`, or a definition that refers to itself or to a later definition |
 | R4 | `REFUSE_NAME` | a core name, a domain name, a reserved name or a repeated name as a new definition |
 | R4 | `REFUSE_TIME` | a time word (`now`, `block`, `timestamp`, `time`, `clock`, `epoch`) as a name or a use; the message says to count operations (`len r`, an `OpPos`) |
+| R1, O7 | `REFUSE_CELL` | a type constructor that is not one cell signature or one cocell signature, a cons-list name in place of a cell monad, or a sealed family that is not a cell monad |
+| - | `REFUSE_EVENT` | an event with more fields than the entry parameter limit, an event field that is not an ABI word type (`Nat`, `Flag`, `U256`, `Addr`), or a repeated event field |
+| D-9 | `REFUSE_HISTORY_WRITE` | a history field `h` that is not `(h t)` or `ADD (h t) e` with `ADD` as `u256Add` or `natAdd`, a history constructor without all of its arguments, or a definition with `State` in its type that refers to a name that the history rule does not check |
+| - | `REFUSE_KIT` | a kit item outside the base span (PLAN section 4); only the kit mode `langc --kit` admits it |
+| O7 | `REFUSE_LAW` | a law-only name (`decrypt`, `observe`, an elim, a fold or a projection of a sealed family) in a definition whose type is not a law (a `Path` or `Trunc1` codomain) |
+| - | `REFUSE_MAP` | a `Map` key type that is not `Nat`, `U256` or `Addr`, or a `Map` value type that is not `Nat`, `Flag`, `U256` or `Addr` |
+| - | `REFUSE_SIG` | a name of the design signature (PLAN section 3): a slot with the wrong type, a reserved name that no slice gives yet, or a defined or primitive name that the kernel gives |
+| - | `REFUSE_STATE` | a second state, a state type with a name other than `State`, a state with parameters, an index telescope or not one constructor, a state field that is not first-order, or a history field that is not `Nat` or `U256` |
 
 ## CLI
 
@@ -83,6 +91,8 @@ build/langc ir PROG
 build/langc abi PROG
 build/langc build PROG -o OUT [--runtime]
 build/langc fmt PROG [--check]
+build/langc explain CODE
+build/langc [--kit] mcp
 ```
 
 - `check` prints `ok`, or refuses the program. With `--json`, it
@@ -106,6 +116,16 @@ build/langc fmt PROG [--check]
   Before emitting text, `fmt` checks that it fits the source size limit
   and reparses it. If the canonical spelling exceeds the size or parser
   depth limit, `fmt` exits 1 with a diagnostic and no stdout output.
+- `explain` prints one line `CODE: MEANING (DOC, SECTION)` for each
+  refusal code: the meaning of the code and the section of this file
+  that has it (S13, Q-S13-7). For any other code, it writes an
+  `EXPLAIN` diagnostic on stderr, writes nothing on stdout and exits 1.
+- `mcp` is a Model Context Protocol server on stdin and stdout (S13,
+  A4). It reads one JSON-RPC 2.0 message on each line and gives the
+  verbs `check --json`, `fmt`, `eval`, `build` and `explain` as 5
+  tools (`docs/MCP.md`). With `--kit`, each tool runs in the kit mode.
+  At EOF it exits 0, also after error replies. It exits 2 when stdin
+  cannot be read or stdout cannot be written.
 
 The exit status is 0 for success, 1 for a refused program and 2 for a
 usage or IO error. A diagnostic on stderr has the form
@@ -127,11 +147,14 @@ Compilation is partial evaluation. The compiler normalizes the body of
 each entry with the parameters as free variables. Types and universes erase.
 Proof contents erase, while their trap flags remain. A lambda stays only as the direct function argument of
 `fold`, `unfold`, `map`, `bind`, `filter`, `either` or `option`. The
-lowering puts its body into a loop or a branch. The lowering refuses two
-programs with a HOST-LIMIT code (see `docs/CAPABILITY.md`):
+lowering puts its body into a loop or a branch. The lowering refuses
+programs with three HOST-LIMIT codes (see `docs/CAPABILITY.md`) and one
+O6 code:
 
 - `REFUSE_RUNTIME_CLOSURE`: a function value must exist at run time.
 - `REFUSE_RUNTIME_TREE`: a fold walks a tree that exists only at run time.
+- `REFUSE_LOWER`: a construct does not lower.
+- `REFUSE_TARGET_SECRET`: the operation touches a secret key or a witness (O6).
 
 ## Lazy traps
 
@@ -200,6 +223,10 @@ what the domain holds and how to change it.
 | `json rows: 20 passed` | for each `test/json/X.lang`, `langc check --json` exits 0 (the rows `ok` and `kit`) or 1 (each other row, whose first code is the file name up to the first dot), writes nothing on stderr, and gives the bytes of `test/json/X.json`; each refused row has `test/json/X.fix` (`docs/CHECK-JSON.md`) |
 | `json refusal codes: 13 of 13` | each `REFUSE_` code of `src/front/check.c` has a row `test/json/CODE.lang`, and the list of codes is not empty |
 | `json fixes: 18 passed` | `build/fronttool fix` applies each `test/json/X.fix` to its row, and `langc check --json` of the result exits 0 or gives a first code other than the code of the row |
+| `mcp rows: 9 passed` | for each `test/mcp/X.in`, `build/mcptool` runs `langc mcp` (`langc --kit mcp` when `X` starts with `kit-`) with the file on stdin: stdout gives the bytes of `test/mcp/X.out`, stderr is empty and the exit status is 0 |
+| `mcp negatives: 3 of 3` | `build/mcptool` exits 1 on each of 3 bad inputs: a copy of the `explain` row with one more byte in its `.out`, a row with no `.out`, and no row |
+| `mcp tools: 5 of 5` | each of the 5 tools (`check`, `fmt`, `eval`, `build`, `explain`) has a `tools/call` request in a `test/mcp/*.in` row |
+| `explain codes: 17 of 17` | the `REFUSE_` codes in `src` (not in `src/front/codes.c`) are the codes of the `src/front/codes.c` table, and for each code `langc explain CODE` exits 0 with one line `CODE: ...` and no stderr |
 | `gate: 0 failures` | the sum of all failures |
 
 `make check` also runs `test/jstest.c` against an ES module with entries
